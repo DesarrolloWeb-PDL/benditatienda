@@ -1,49 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { promises as fs } from 'fs'
-import path from 'path'
+import { put } from '@vercel/blob'
 import { hasAdminSession } from '@/lib/admin-auth'
-import { uploadPublicAsset } from '@/lib/supabase'
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
+const MAX_FILE_SIZE = 5 * 1024 * 1024
 const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml']
 
 export const dynamic = 'force-dynamic'
-
-function getUploadDir() {
-  return path.join('/tmp', 'logo-uploads')
-}
-
-function getContentType(fileName: string) {
-  if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg')) return 'image/jpeg'
-  if (fileName.endsWith('.gif')) return 'image/gif'
-  if (fileName.endsWith('.webp')) return 'image/webp'
-  if (fileName.endsWith('.svg')) return 'image/svg+xml'
-  return 'image/png'
-}
-
-async function readFallbackLogo() {
-  const fallbackPath = path.join(process.cwd(), 'public', 'img', 'espiga.png')
-  const buffer = await fs.readFile(fallbackPath)
-
-  return new NextResponse(buffer, {
-    headers: {
-      'Content-Type': 'image/png',
-      'Cache-Control': 'public, max-age=86400',
-    },
-  })
-}
-
-function shouldUseLocalFallback(error: unknown) {
-  return process.env.NODE_ENV !== 'production'
-}
-
-function toStorageErrorMessage(error: unknown) {
-  if (error instanceof Error && error.message.includes('BLOB_READ_WRITE_TOKEN')) {
-    return 'Vercel Blob Storage no está configurado. Configurá BLOB_READ_WRITE_TOKEN en las variables de entorno.'
-  }
-
-  return error instanceof Error ? error.message : String(error)
-}
 
 function getFileExtension(file: File) {
   const byMime: Record<string, string> = {
@@ -53,25 +15,7 @@ function getFileExtension(file: File) {
     'image/gif': 'gif',
     'image/svg+xml': 'svg',
   }
-
   return file.name.split('.').pop()?.toLowerCase() || byMime[file.type] || 'png'
-}
-
-async function uploadLogoLocally(file: File, req: NextRequest) {
-  const uploadDir = getUploadDir()
-  const ext = getFileExtension(file)
-  const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`
-  const filepath = path.join(uploadDir, filename)
-
-  await fs.mkdir(uploadDir, { recursive: true })
-  await fs.writeFile(filepath, Buffer.from(await file.arrayBuffer()))
-
-  const url = `/api/admin/uploads/logo?file=${encodeURIComponent(filename)}`
-
-  return {
-    filePath: filename,
-    publicUrl: url,
-  }
 }
 
 export async function POST(req: NextRequest) {
@@ -80,14 +24,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Parse form data
     const formData = await req.formData()
     const file = formData.get('file') as File
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
-    // Validate file type
     if (!ALLOWED_TYPES.includes(file.type)) {
       return NextResponse.json(
         { error: `Invalid file type. Allowed: ${ALLOWED_TYPES.join(', ')}` },
@@ -95,70 +37,28 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Validate file size
     if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json(
-        { error: 'File too large (max 5MB)' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'File too large (max 5MB)' }, { status: 400 })
     }
 
-    let upload
-    try {
-      upload = await uploadPublicAsset(file, 'branding')
-    } catch (storageError) {
-      if (!shouldUseLocalFallback(storageError)) {
-        throw new Error(toStorageErrorMessage(storageError))
-      }
+    const ext = getFileExtension(file)
+    const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
 
-      console.warn('[Logo Upload] Vercel Blob no disponible; usando fallback local')
-      upload = await uploadLogoLocally(file, req)
-    }
+    const blob = await put(`branding/${filename}`, file, {
+      access: 'public',
+      contentType: file.type,
+    })
 
     return NextResponse.json({
-      url: upload.publicUrl,
-      filename: upload.filePath,
+      url: blob.url,
+      filename,
       size: file.size,
       type: file.type,
     })
   } catch (error) {
     return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : 'Upload failed',
-      },
+      { error: error instanceof Error ? error.message : 'Upload failed' },
       { status: 500 }
     )
-  }
-}
-
-// GET endpoint para servir archivos de /tmp en producción
-export async function GET(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url)
-    const filename = searchParams.get('file')
-    
-    if (!filename) {
-      return NextResponse.json({ error: 'No file specified' }, { status: 400 })
-    }
-
-    // En producción, leer de /tmp
-    const uploadDir = getUploadDir()
-    const filepath = path.join(uploadDir, filename)
-    
-    // Validar que el archivo está dentro del directorio permitido
-    if (!filepath.startsWith(uploadDir)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
-    const buffer = await fs.readFile(filepath)
-
-    return new NextResponse(buffer, {
-      headers: {
-        'Content-Type': getContentType(filename),
-        'Cache-Control': 'public, max-age=86400',
-      },
-    })
-  } catch (error) {
-    return readFallbackLogo()
   }
 }
