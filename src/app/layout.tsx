@@ -10,14 +10,14 @@ import { getSiteContent } from "@/lib/site-content";
 import { Toaster } from "@/components/toaster";
 
 export const metadata: Metadata = {
-  title: "Bendito Cross — Indumentaria Deportiva",
+  title: "Bendita Tienda — Tienda Deportiva",
   description: "Indumentaria deportiva, equipamiento y suplementos para CrossFit y entrenamiento funcional.",
   manifest: "/manifest",
   themeColor: "#FF0000",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Bendito Cross",
+    title: "Bendita Tienda",
   },
   icons: {
     icon: [

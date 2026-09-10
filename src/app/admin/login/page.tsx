@@ -55,7 +55,7 @@ function LoginForm() {
                 className="object-contain w-40 h-40 md:w-48 md:h-48"
               />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Clara y Yema</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Bendita Tienda</h1>
           <p className="text-gray-500 text-sm mt-1">Panel de administración</p>
         </div>
 

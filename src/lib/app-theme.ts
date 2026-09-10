@@ -20,8 +20,8 @@ export interface AppTheme {
 }
 
 const DEFAULT_THEME: AppTheme = {
-  appTitle: 'Bendito Cross',
-  appSubtitle: 'Indumentaria Deportiva y Equipamiento',
+  appTitle: 'Bendita Tienda',
+  appSubtitle: 'Tienda Deportiva',
   logoUrl: '/img/benditocross.png',
   heroImageUrl: '/img/hero-bg.png',
   primaryColor: '#FF0000',

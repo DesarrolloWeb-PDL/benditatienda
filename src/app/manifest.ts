@@ -10,8 +10,8 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
   const timestamp = Date.now();
 
   return {
-    name: theme.appTitle || 'Clara y Yema',
-    short_name: 'Clara y Yema',
+    name: theme.appTitle || 'Bendita Tienda',
+    short_name: 'Bendita Tienda',
     description: 'Productos frescos de huerta directo al consumidor. Huevos caseros, verduras, frutas y más.',
     start_url: `/?v=${timestamp}`,
     display: 'standalone',

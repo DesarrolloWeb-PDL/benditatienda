@@ -88,7 +88,7 @@ const themeSchema = z.object({
 type ThemeConfig = z.infer<typeof themeSchema>
 
 const DEFAULT_THEME: ThemeConfig = {
-  appTitle: 'Bendito Cross',
+  appTitle: 'Bendita Tienda',
   appSubtitle: 'Indumentaria Deportiva y Equipamiento',
   logoUrl: '/img/benditocross.png',
   heroImageUrl: '/img/hero-bg.png',

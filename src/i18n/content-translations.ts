@@ -12,8 +12,8 @@ type ContentFields = {
 };
 
 const CONTENT_PT: ContentFields = {
-  heroTitle: 'Equipamento Esportivo',
-  heroSubtitle: 'Indumentaria para CrossFit e treinamento funcional.',
+  heroTitle: 'Tienda Deportiva',
+  heroSubtitle: 'Indumentaria, equipamiento y suplementos para entrenar',
   infoTitle1: 'Roupas Esportivas',
   infoSubtitle1: 'Camisetas, calças, shorts e acessórios para treinar.',
   infoTitle2: 'Equipamento',
@@ -23,8 +23,8 @@ const CONTENT_PT: ContentFields = {
 };
 
 const CONTENT_EN: ContentFields = {
-  heroTitle: 'Sports Equipment',
-  heroSubtitle: 'Clothing for CrossFit and functional training.',
+  heroTitle: 'Tienda Deportiva',
+  heroSubtitle: 'Indumentaria, equipamiento y suplementos para entrenar',
   infoTitle1: 'Sports Clothing',
   infoSubtitle1: 'T-shirts, pants, shorts and accessories for training.',
   infoTitle2: 'Equipment',

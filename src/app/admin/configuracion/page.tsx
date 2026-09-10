@@ -964,7 +964,7 @@ export default function AdminConfigPage() {
   const [uploadingHeroImage, setUploadingHeroImage] = useState(false)
   const [themeMsg, setThemeMsg] = useState<string | null>(null)
   const [theme, setTheme] = useState({
-    appTitle: 'Bendito Cross',
+    appTitle: 'Bendita Tienda',
     appSubtitle: 'Indumentaria Deportiva y Equipamiento',
     logoUrl: '/img/benditocross.png',
     primaryColor: '#FF0000',

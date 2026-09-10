@@ -127,7 +127,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               />
             )}
             <div>
-              <p className="font-bold text-sm leading-none" style={{ color: 'var(--brand-text-primary)' }}>Clara y Yema</p>
+              <p className="font-bold text-sm leading-none" style={{ color: 'var(--brand-text-primary)' }}>Bendita Tienda</p>
               <p className="text-xs mt-0.5" style={{ color: 'var(--brand-text-muted)' }}>Panel de Admin</p>
             </div>
           </Link>

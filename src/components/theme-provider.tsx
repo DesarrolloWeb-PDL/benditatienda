@@ -42,8 +42,8 @@ export type ThemeSettings = {
 }
 
 export const DEFAULT_THEME: ThemeSettings = {
-  appTitle: 'Bendito Cross',
-  appSubtitle: 'Indumentaria Deportiva y Equipamiento',
+  appTitle: 'Bendita Tienda',
+  appSubtitle: 'Tienda Deportiva',
   logoUrl: '/img/benditocross.png',
   primaryColor: '#FF0000',
   primaryHover: '#CC0000',
