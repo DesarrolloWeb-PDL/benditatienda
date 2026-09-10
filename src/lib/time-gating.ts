@@ -1,0 +1,227 @@
+import { DateTime } from 'luxon';
+import { prisma } from './db';
+
+export interface TimeGatingConfig {
+  timezone: string;
+  openingDay: number; // 0=Domingo, 1=Lunes, ..., 3=Miércoles
+  openingHour: number;
+  openingMinute: number;
+  closingDay: number;
+  closingHour: number;
+  closingMinute: number;
+}
+
+export const DEFAULT_CONFIG: TimeGatingConfig = {
+  timezone: 'Europe/Madrid',
+  openingDay: 3, // Miércoles
+  openingHour: 18,
+  openingMinute: 0,
+  closingDay: 0, // Domingo
+  closingHour: 20,
+  closingMinute: 0,
+};
+
+export class TimeGatingService {
+  private config: TimeGatingConfig;
+
+  constructor(config: TimeGatingConfig = DEFAULT_CONFIG) {
+    this.config = config;
+  }
+
+  getConfig(): TimeGatingConfig {
+    return this.config;
+  }
+
+  /**
+   * Calcula el openingTime basado en weekStart (lunes)
+   */
+  private getOpeningTime(weekStart: DateTime): DateTime {
+    return weekStart.plus({ 
+      days: this.config.openingDay - 1,
+      hours: this.config.openingHour,
+      minutes: this.config.openingMinute 
+    });
+  }
+
+  /**
+   * Calcula el closingTime basado en weekStart (lunes)
+   * Cuando openingDay > closingDay (ej. Miércoles→Domingo), el cierre cae en la misma semana.
+   * Cuando openingDay <= closingDay (ej. Domingo→Miércoles), apertura y cierre están en la misma semana.
+   */
+  private getClosingTime(weekStart: DateTime): DateTime {
+    if (this.config.openingDay <= this.config.closingDay) {
+      return weekStart.plus({ 
+        days: this.config.closingDay - 1,
+        hours: this.config.closingHour,
+        minutes: this.config.closingMinute 
+      });
+    }
+    return weekStart.plus({ 
+      days: this.config.closingDay + 6,
+      hours: this.config.closingHour,
+      minutes: this.config.closingMinute 
+    });
+  }
+
+  /**
+   * Verifica si el sitio está abierto para pedidos
+   */
+  isOpen(now?: DateTime): boolean {
+    const currentTime = now || DateTime.now().setZone(this.config.timezone);
+    const weekStart = currentTime.startOf('week'); // Lunes 00:00
+    const openingTime = this.getOpeningTime(weekStart);
+    const closingTime = this.getClosingTime(weekStart);
+    return currentTime >= openingTime && currentTime <= closingTime;
+  }
+
+  /**
+   * Obtiene el tiempo restante hasta la próxima apertura
+   */
+  getTimeUntilOpening(now?: DateTime): {
+    isOpen: boolean;
+    nextOpening: DateTime | null;
+    remainingMs: number | null;
+  } {
+    const currentTime = now || DateTime.now().setZone(this.config.timezone);
+    const isCurrentlyOpen = this.isOpen(currentTime);
+
+    if (isCurrentlyOpen) {
+      return {
+        isOpen: true,
+        nextOpening: null,
+        remainingMs: null,
+      };
+    }
+
+    // Calcular próxima apertura
+    const weekStart = currentTime.startOf('week');
+    let nextOpening = weekStart.plus({ 
+      days: this.config.openingDay - 1,
+      hours: this.config.openingHour,
+      minutes: this.config.openingMinute 
+    });
+
+    // Si ya pasó la apertura de esta semana, calcular la siguiente
+    if (nextOpening <= currentTime) {
+      nextOpening = nextOpening.plus({ weeks: 1 });
+    }
+
+    return {
+      isOpen: false,
+      nextOpening,
+      remainingMs: nextOpening.diff(currentTime).milliseconds,
+    };
+  }
+
+  /**
+   * Obtiene el ID de la semana actual (formato ISO: YYYY-Www)
+   */
+  getCurrentWeekId(now?: DateTime): string {
+    const currentTime = now || DateTime.now().setZone(this.config.timezone);
+    return currentTime.toFormat('kkkk-\'W\'WW'); // ej: "2025-W45"
+  }
+
+  /**
+   * Formatea el tiempo restante de manera legible
+   */
+  formatTimeRemaining(ms: number): {
+    days: number;
+    hours: number;
+    minutes: number;
+    seconds: number;
+  } {
+    const seconds = Math.floor((ms / 1000) % 60);
+    const minutes = Math.floor((ms / 1000 / 60) % 60);
+    const hours = Math.floor((ms / 1000 / 60 / 60) % 24);
+    const days = Math.floor(ms / 1000 / 60 / 60 / 24);
+
+    return { days, hours, minutes, seconds };
+  }
+
+  /**
+   * Obtiene el tiempo hasta el cierre
+   */
+  getTimeUntilClosing(now?: DateTime): {
+    isClosed: boolean;
+    nextClosing: DateTime | null;
+    remainingMs: number | null;
+  } {
+    const currentTime = now || DateTime.now().setZone(this.config.timezone);
+    const isCurrentlyOpen = this.isOpen(currentTime);
+
+    if (!isCurrentlyOpen) {
+      return {
+        isClosed: true,
+        nextClosing: null,
+        remainingMs: null,
+      };
+    }
+
+    const weekStart = currentTime.startOf('week');
+    const closingTime = this.getClosingTime(weekStart);
+
+    return {
+      isClosed: false,
+      nextClosing: closingTime,
+      remainingMs: closingTime.diff(currentTime).milliseconds,
+    };
+  }
+}
+
+export const timeGating = new TimeGatingService();
+
+function parseIntOr(value: string | undefined, fallback: number) {
+  if (value == null) return fallback;
+  const n = Number.parseInt(value, 10);
+  return Number.isNaN(n) ? fallback : n;
+}
+
+function parseBoolOr(value: string | undefined, fallback: boolean) {
+  if (value == null) return fallback;
+  return value === 'true';
+}
+
+export async function getTimeGatingRuntime(): Promise<{
+  enabled: boolean;
+  service: TimeGatingService;
+}> {
+  try {
+    const configs = await prisma.siteConfig.findMany({
+      where: {
+        key: {
+          in: [
+            'time_gating_enabled',
+            'opening_day',
+            'opening_hour',
+            'opening_minute',
+            'closing_day',
+            'closing_hour',
+            'closing_minute',
+          ],
+        },
+      },
+    });
+
+    const map = new Map(configs.map((cfg) => [cfg.key, cfg.value]));
+
+    const config: TimeGatingConfig = {
+      timezone: DEFAULT_CONFIG.timezone,
+      openingDay: parseIntOr(map.get('opening_day'), DEFAULT_CONFIG.openingDay),
+      openingHour: parseIntOr(map.get('opening_hour'), DEFAULT_CONFIG.openingHour),
+      openingMinute: parseIntOr(map.get('opening_minute'), DEFAULT_CONFIG.openingMinute),
+      closingDay: parseIntOr(map.get('closing_day'), DEFAULT_CONFIG.closingDay),
+      closingHour: parseIntOr(map.get('closing_hour'), DEFAULT_CONFIG.closingHour),
+      closingMinute: parseIntOr(map.get('closing_minute'), DEFAULT_CONFIG.closingMinute),
+    };
+
+    const enabled = parseBoolOr(map.get('time_gating_enabled'), true);
+
+    return {
+      enabled,
+      service: new TimeGatingService(config),
+    };
+  } catch (error) {
+    console.error('Error loading time-gating config from DB, using defaults:', error);
+    return { enabled: true, service: timeGating };
+  }
+}

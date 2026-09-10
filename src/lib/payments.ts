@@ -1,0 +1,272 @@
+import { prisma } from '@/lib/db'
+
+export const PAYMENT_PROVIDERS = ['STRIPE', 'MERCADO_PAGO', 'BANK_TRANSFER', 'PAY_ON_DELIVERY'] as const
+
+export type PaymentProvider = (typeof PAYMENT_PROVIDERS)[number]
+
+export const PAYMENT_PROVIDER_LABELS: Record<PaymentProvider, string> = {
+  STRIPE: 'Tarjeta con Stripe',
+  MERCADO_PAGO: 'Mercado Pago',
+  BANK_TRANSFER: 'Transferencia bancaria',
+  PAY_ON_DELIVERY: 'Reserva — Pago en entrega',
+}
+
+export const ORDER_PAYMENT_METHOD_LABELS: Record<string, string> = {
+  stripe: 'Tarjeta con Stripe',
+  mercadopago: 'Mercado Pago',
+  bank_transfer: 'Transferencia bancaria',
+  pay_on_delivery: 'Reserva — Pago en entrega',
+}
+
+export function formatOrderPaymentMethod(value: string) {
+  return ORDER_PAYMENT_METHOD_LABELS[value] ?? value
+}
+
+export interface BankTransferSettings {
+  enabled: boolean;
+  bankName: string;
+  accountHolder: string;
+  alias: string;
+  cbu: string;
+  cuit: string;
+  notes: string;
+}
+
+const DEFAULT_BANK_TRANSFER_SETTINGS: BankTransferSettings = {
+  enabled: false,
+  bankName: '',
+  accountHolder: '',
+  alias: '',
+  cbu: '',
+  cuit: '',
+  notes: '',
+}
+
+const DEFAULT_PROVIDER: PaymentProvider = 'STRIPE'
+const SITE_CONFIG_KEY = 'default_payment_provider'
+const BANK_TRANSFER_PREFIX = 'payment_bank_transfer_'
+
+function isFilled(value: string) {
+  return value.trim().length > 0
+}
+
+function parseBoolean(value: string | null | undefined) {
+  return value === 'true' || value === '1' || value === 'yes'
+}
+
+function normalizeSetting(value: string | null | undefined) {
+  return value?.trim() ?? ''
+}
+
+export function isPaymentProvider(value: string): value is PaymentProvider {
+  return PAYMENT_PROVIDERS.includes(value as PaymentProvider)
+}
+
+export async function getStripeSecretKey(): Promise<string | null> {
+  try {
+    const row = await prisma.siteConfig.findUnique({
+      where: { key: 'stripe_secret_key' },
+      select: { value: true },
+    })
+    if (row?.value?.trim()) return row.value.trim()
+  } catch {}
+  return process.env.STRIPE_SECRET_KEY ?? null
+}
+
+export async function setStripeSecretKey(key: string) {
+  await prisma.siteConfig.upsert({
+    where: { key: 'stripe_secret_key' },
+    create: { key: 'stripe_secret_key', value: key },
+    update: { value: key },
+  })
+}
+
+export async function getMercadoPagoAccessToken(): Promise<string | null> {
+  try {
+    const row = await prisma.siteConfig.findUnique({
+      where: { key: 'mercadopago_access_token' },
+      select: { value: true },
+    })
+    if (row?.value?.trim()) return row.value.trim()
+  } catch {}
+  return process.env.MERCADOPAGO_ACCESS_TOKEN ?? null
+}
+
+export async function setMercadoPagoAccessToken(token: string) {
+  await prisma.siteConfig.upsert({
+    where: { key: 'mercadopago_access_token' },
+    create: { key: 'mercadopago_access_token', value: token },
+    update: { value: token },
+  })
+}
+
+export async function deleteStripeSecretKey() {
+  try {
+    await prisma.siteConfig.delete({ where: { key: 'stripe_secret_key' } })
+  } catch {}
+}
+
+export async function deleteMercadoPagoAccessToken() {
+  try {
+    await prisma.siteConfig.delete({ where: { key: 'mercadopago_access_token' } })
+  } catch {}
+}
+
+export async function getEnabledPaymentProviders(): Promise<PaymentProvider[]> {
+  const providers: PaymentProvider[] = []
+
+  const stripeKey = await getStripeSecretKey()
+  const mpToken = await getMercadoPagoAccessToken()
+
+  if (stripeKey) {
+    providers.push('STRIPE')
+  }
+
+  if (mpToken) {
+    providers.push('MERCADO_PAGO')
+  }
+
+  return providers
+}
+
+export function getSiteUrl(): string {
+  return process.env.NEXT_PUBLIC_URL
+    ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined)
+    ?? 'http://localhost:3000'
+}
+
+export async function getBankTransferSettings(): Promise<BankTransferSettings> {
+  try {
+    const rows = await prisma.siteConfig.findMany({
+      where: {
+        key: {
+          in: [
+            `${BANK_TRANSFER_PREFIX}enabled`,
+            `${BANK_TRANSFER_PREFIX}bank_name`,
+            `${BANK_TRANSFER_PREFIX}account_holder`,
+            `${BANK_TRANSFER_PREFIX}alias`,
+            `${BANK_TRANSFER_PREFIX}cbu`,
+            `${BANK_TRANSFER_PREFIX}cuit`,
+            `${BANK_TRANSFER_PREFIX}notes`,
+          ],
+        },
+      },
+    })
+
+    const map = new Map(rows.map((row) => [row.key, row.value]))
+
+    return {
+      enabled: parseBoolean(map.get(`${BANK_TRANSFER_PREFIX}enabled`)),
+      bankName: normalizeSetting(map.get(`${BANK_TRANSFER_PREFIX}bank_name`)),
+      accountHolder: normalizeSetting(map.get(`${BANK_TRANSFER_PREFIX}account_holder`)),
+      alias: normalizeSetting(map.get(`${BANK_TRANSFER_PREFIX}alias`)),
+      cbu: normalizeSetting(map.get(`${BANK_TRANSFER_PREFIX}cbu`)),
+      cuit: normalizeSetting(map.get(`${BANK_TRANSFER_PREFIX}cuit`)),
+      notes: normalizeSetting(map.get(`${BANK_TRANSFER_PREFIX}notes`)),
+    }
+  } catch (error) {
+    console.error('Error reading bank transfer settings:', error)
+    return DEFAULT_BANK_TRANSFER_SETTINGS
+  }
+}
+
+export async function setBankTransferSettings(settings: BankTransferSettings) {
+  const entries = {
+    enabled: settings.enabled ? 'true' : 'false',
+    bank_name: settings.bankName,
+    account_holder: settings.accountHolder,
+    alias: settings.alias,
+    cbu: settings.cbu,
+    cuit: settings.cuit,
+    notes: settings.notes,
+  }
+
+  await prisma.$transaction(
+    Object.entries(entries).map(([suffix, value]) =>
+      prisma.siteConfig.upsert({
+        where: { key: `${BANK_TRANSFER_PREFIX}${suffix}` },
+        create: { key: `${BANK_TRANSFER_PREFIX}${suffix}`, value },
+        update: { value },
+      })
+    )
+  )
+}
+
+const PAY_ON_DELIVERY_PREFIX = 'payment_pay_on_delivery_'
+
+export async function getPayOnDeliverySettings(): Promise<{ enabled: boolean }> {
+  try {
+    const row = await prisma.siteConfig.findUnique({
+      where: { key: `${PAY_ON_DELIVERY_PREFIX}enabled` },
+      select: { value: true },
+    })
+    return { enabled: parseBoolean(row?.value) }
+  } catch {
+    return { enabled: false }
+  }
+}
+
+export async function setPayOnDeliverySettings(enabled: boolean) {
+  await prisma.siteConfig.upsert({
+    where: { key: `${PAY_ON_DELIVERY_PREFIX}enabled` },
+    create: { key: `${PAY_ON_DELIVERY_PREFIX}enabled`, value: enabled ? 'true' : 'false' },
+    update: { value: enabled ? 'true' : 'false' },
+  })
+}
+
+interface PaymentSettings {
+  enabledProviders: PaymentProvider[]
+  defaultProvider: PaymentProvider
+  bankTransfer: BankTransferSettings
+  payOnDelivery: { enabled: boolean }
+}
+
+export async function getPaymentSettings(): Promise<PaymentSettings> {
+  const enabledProviders = await getEnabledPaymentProviders()
+  const bankTransfer = await getBankTransferSettings()
+  const payOnDelivery = await getPayOnDeliverySettings()
+
+  if (bankTransfer.enabled && (isFilled(bankTransfer.alias) || isFilled(bankTransfer.cbu) || isFilled(bankTransfer.bankName))) {
+    enabledProviders.push('BANK_TRANSFER')
+  }
+
+  if (payOnDelivery.enabled) {
+    enabledProviders.push('PAY_ON_DELIVERY')
+  }
+
+  let configuredDefault: string | null = null
+
+  try {
+    const config = await prisma.siteConfig.findUnique({
+      where: { key: SITE_CONFIG_KEY },
+      select: { value: true },
+    })
+
+    configuredDefault = config?.value ?? null
+  } catch (error) {
+    console.error('Error reading payment settings:', error)
+  }
+
+  const configuredProvider: PaymentProvider | null = isPaymentProvider(configuredDefault ?? '')
+    ? (configuredDefault as PaymentProvider)
+    : null
+
+  const defaultProvider = configuredProvider && enabledProviders.includes(configuredProvider)
+    ? configuredProvider
+    : enabledProviders[0] ?? DEFAULT_PROVIDER
+
+  return {
+    enabledProviders,
+    defaultProvider,
+    bankTransfer,
+    payOnDelivery,
+  }
+}
+
+export async function setDefaultPaymentProvider(provider: PaymentProvider) {
+  await prisma.siteConfig.upsert({
+    where: { key: SITE_CONFIG_KEY },
+    update: { value: provider },
+    create: { key: SITE_CONFIG_KEY, value: provider },
+  })
+}

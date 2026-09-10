@@ -1,0 +1,2124 @@
+'use client'
+export const dynamic = "force-dynamic"
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Clock3, Eye, EyeOff, Key, Layout, Loader2, LogOut, Mail, MapPin, Info, Palette, Plus, RefreshCw, RotateCcw, Save, Settings, Trash2, Truck } from 'lucide-react'
+import Image from 'next/image';
+import * as Tabs from '@radix-ui/react-tabs'
+import { normalizePublicAssetUrl } from '@/lib/url-normalizer'
+import { DEFAULT_SITE_CONTENT, type SiteContent } from '@/lib/site-content.shared'
+import { formatCurrency } from '@/lib/format'
+
+type SiteContentEditorProps = {
+  siteContent: SiteContent
+  setSiteContent: React.Dispatch<React.SetStateAction<SiteContent>>
+  loading: boolean
+  saving: boolean
+  message: string | null
+  onSave: () => void
+  onReset: () => void
+}
+
+type PreventaConfig = {
+  enabled: boolean
+  openingDay: number
+  openingHour: number
+  openingMinute: number
+  closingDay: number
+  closingHour: number
+  closingMinute: number
+}
+
+type PickupPoint = {
+  id: string
+  name: string
+  address: string
+  city: string
+  postalCode: string
+  schedule: string
+  instructions: string
+  isActive: boolean
+  order: number
+}
+
+type PickupPointDraft = Omit<PickupPoint, 'id'>
+
+type DeliveryConfigAdminProps = {
+  preventa: PreventaConfig
+  setPreventa: React.Dispatch<React.SetStateAction<PreventaConfig>>
+  loadingPreventa: boolean
+  savingPreventa: boolean
+  preventaMsg: string | null
+  onRefreshPreventa: () => void
+  onSavePreventa: () => void
+  onResetPreventa: () => void
+  shippingCosts: {
+    pickupPoint: number
+    localDelivery: number
+    nationalCourier: number
+  }
+  setShippingCosts: React.Dispatch<React.SetStateAction<{
+    pickupPoint: number
+    localDelivery: number
+    nationalCourier: number
+  }>>
+  loadingShipping: boolean
+  savingShipping: boolean
+  shippingMsg: string | null
+  onSaveShipping: () => void
+  onResetShipping: () => void
+  pickupPoints: PickupPoint[]
+  pickupDraft: PickupPointDraft
+  setPickupDraft: React.Dispatch<React.SetStateAction<PickupPointDraft>>
+  editingPickupId: string | null
+  loadingPickupPoints: boolean
+  savingPickupPoint: boolean
+  pickupPointsMsg: string | null
+  onRefreshPickupPoints: () => void
+  onEditPickupPoint: (point: PickupPoint) => void
+  onCancelEditPickupPoint: () => void
+  onSavePickupPoint: () => void
+  onDeletePickupPoint: (id: string) => void
+}
+
+const DAY_OPTIONS = [
+  { value: 0, label: 'Domingo' },
+  { value: 1, label: 'Lunes' },
+  { value: 2, label: 'Martes' },
+  { value: 3, label: 'Miércoles' },
+  { value: 4, label: 'Jueves' },
+  { value: 5, label: 'Viernes' },
+  { value: 6, label: 'Sábado' },
+]
+
+const DEFAULT_PREVENTA_CONFIG: PreventaConfig = {
+  enabled: true,
+  openingDay: 3,
+  openingHour: 18,
+  openingMinute: 0,
+  closingDay: 0,
+  closingHour: 20,
+  closingMinute: 0,
+}
+
+const EMPTY_PICKUP_POINT: PickupPointDraft = {
+  name: '',
+  address: '',
+  city: '',
+  postalCode: '',
+  schedule: '',
+  instructions: '',
+  isActive: true,
+  order: 0,
+}
+
+function SiteContentActions({ loading, saving, message, onSave, onReset }: Omit<SiteContentEditorProps, 'siteContent' | 'setSiteContent'>) {
+  return (
+    <>
+      {message && (
+        <p className={`text-sm ${message.includes('actualizada') || message.includes('restablecida') ? 'text-green-600' : 'text-red-600'}`}>
+          {message}
+        </p>
+      )}
+
+      <div className="flex gap-2">
+        <button
+          onClick={onSave}
+          disabled={loading || saving}
+          className="px-4 py-2 bg-brand-gold text-white text-sm font-medium rounded-lg hover:bg-brand-gold-dark disabled:opacity-50"
+        >
+          {saving ? 'Guardando...' : 'Guardar contenido'}
+        </button>
+        <button
+          onClick={onReset}
+          disabled={loading || saving}
+          className="px-4 py-2 bg-gray-700 text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-600 disabled:opacity-50"
+        >
+          Restablecer
+        </button>
+      </div>
+    </>
+  )
+}
+
+function FooterConfigAdmin({ siteContent, setSiteContent, loading, saving, message, onSave, onReset }: SiteContentEditorProps) {
+  return (
+    <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 space-y-4">
+      <div>
+        <h2 className="text-lg font-bold text-white">Footer</h2>
+        <p className="text-sm text-gray-400 mt-1">Editá el bloque descriptivo, horarios y datos de contacto del pie del sitio.</p>
+      </div>
+
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">Descripción</label>
+        <textarea
+          value={siteContent.footerDescription}
+          disabled={loading || saving}
+          onChange={(e) => setSiteContent((prev) => ({ ...prev, footerDescription: e.target.value }))}
+          className="w-full min-h-24 px-3 py-2 rounded-lg border border-gray-700 text-sm"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Título del bloque de horario</label>
+          <input
+            type="text"
+            value={siteContent.footerScheduleTitle}
+            disabled={loading || saving}
+            onChange={(e) => setSiteContent((prev) => ({ ...prev, footerScheduleTitle: e.target.value }))}
+            className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Título del bloque de contacto</label>
+          <input
+            type="text"
+            value={siteContent.footerContactTitle}
+            disabled={loading || saving}
+            onChange={(e) => setSiteContent((prev) => ({ ...prev, footerContactTitle: e.target.value }))}
+            className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Horario visible</label>
+          <input
+            type="text"
+            value={siteContent.footerScheduleText}
+            disabled={loading || saving}
+            onChange={(e) => setSiteContent((prev) => ({ ...prev, footerScheduleText: e.target.value }))}
+            className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Texto de entregas</label>
+          <input
+            type="text"
+            value={siteContent.footerDeliveryText}
+            disabled={loading || saving}
+            onChange={(e) => setSiteContent((prev) => ({ ...prev, footerDeliveryText: e.target.value }))}
+            className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm"
+          />
+        </div>
+        <div className="md:col-span-2">
+          <label className="block text-xs text-gray-400 mb-1">Nota legal o institucional del pie</label>
+          <input
+            type="text"
+            value={siteContent.footerLegalNote}
+            disabled={loading || saving}
+            onChange={(e) => setSiteContent((prev) => ({ ...prev, footerLegalNote: e.target.value }))}
+            className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm"
+          />
+        </div>
+      </div>
+
+      <SiteContentActions
+        loading={loading}
+        saving={saving}
+        message={message}
+        onSave={onSave}
+        onReset={onReset}
+      />
+    </div>
+  )
+}
+
+function NavConfigAdmin({ siteContent, setSiteContent, loading, saving, message, onSave, onReset }: SiteContentEditorProps) {
+  return (
+    <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 space-y-4">
+      <div>
+        <h2 className="text-lg font-bold text-white">Navegación</h2>
+        <p className="text-sm text-gray-400 mt-1">Definí los textos visibles en el menú principal del sitio.</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Link a productos</label>
+          <input
+            type="text"
+            value={siteContent.navProductsLabel}
+            disabled={loading || saving}
+            onChange={(e) => setSiteContent((prev) => ({ ...prev, navProductsLabel: e.target.value }))}
+            className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Link a sobre nosotros</label>
+          <input
+            type="text"
+            value={siteContent.navAboutLabel}
+            disabled={loading || saving}
+            onChange={(e) => setSiteContent((prev) => ({ ...prev, navAboutLabel: e.target.value }))}
+            className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Link a contacto</label>
+          <input
+            type="text"
+            value={siteContent.navContactLabel}
+            disabled={loading || saving}
+            onChange={(e) => setSiteContent((prev) => ({ ...prev, navContactLabel: e.target.value }))}
+            className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm"
+          />
+        </div>
+      </div>
+
+      <SiteContentActions
+        loading={loading}
+        saving={saving}
+        message={message}
+        onSave={onSave}
+        onReset={onReset}
+      />
+    </div>
+  )
+}
+
+function SobreNosotrosConfigAdmin({ siteContent, setSiteContent, loading, saving, message, onSave, onReset }: SiteContentEditorProps) {
+  return (
+    <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 space-y-4">
+      <div>
+        <h2 className="text-lg font-bold text-white">Sobre Nosotros</h2>
+        <p className="text-sm text-gray-400 mt-1">Configurá el contenido principal de la página institucional.</p>
+      </div>
+
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">Título</label>
+        <input
+          type="text"
+          value={siteContent.aboutTitle}
+          disabled={loading || saving}
+          onChange={(e) => setSiteContent((prev) => ({ ...prev, aboutTitle: e.target.value }))}
+          className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">Texto principal</label>
+        <textarea
+          value={siteContent.aboutBody}
+          disabled={loading || saving}
+          onChange={(e) => setSiteContent((prev) => ({ ...prev, aboutBody: e.target.value }))}
+          className="w-full min-h-32 px-3 py-2 rounded-lg border border-gray-700 text-sm"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">Segundo párrafo institucional</label>
+        <textarea
+          value={siteContent.aboutSecondaryBody}
+          disabled={loading || saving}
+          onChange={(e) => setSiteContent((prev) => ({ ...prev, aboutSecondaryBody: e.target.value }))}
+          className="w-full min-h-28 px-3 py-2 rounded-lg border border-gray-700 text-sm"
+        />
+      </div>
+
+      <SiteContentActions
+        loading={loading}
+        saving={saving}
+        message={message}
+        onSave={onSave}
+        onReset={onReset}
+      />
+    </div>
+  )
+}
+
+function ContactoConfigAdmin({ siteContent, setSiteContent, loading, saving, message, onSave, onReset }: SiteContentEditorProps) {
+  return (
+    <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 space-y-4">
+      <div>
+        <h2 className="text-lg font-bold text-white">Contacto</h2>
+        <p className="text-sm text-gray-400 mt-1">Centralizá el texto introductorio y los datos que se muestran en la página y en el footer.</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="md:col-span-2">
+          <label className="block text-xs text-gray-400 mb-1">Título de la página</label>
+          <input
+            type="text"
+            value={siteContent.contactTitle}
+            disabled={loading || saving}
+            onChange={(e) => setSiteContent((prev) => ({ ...prev, contactTitle: e.target.value }))}
+            className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm"
+          />
+        </div>
+        <div className="md:col-span-2">
+          <label className="block text-xs text-gray-400 mb-1">Texto introductorio</label>
+          <textarea
+            value={siteContent.contactIntro}
+            disabled={loading || saving}
+            onChange={(e) => setSiteContent((prev) => ({ ...prev, contactIntro: e.target.value }))}
+            className="w-full min-h-24 px-3 py-2 rounded-lg border border-gray-700 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Email</label>
+          <input
+            type="email"
+            value={siteContent.contactEmail}
+            disabled={loading || saving}
+            onChange={(e) => setSiteContent((prev) => ({ ...prev, contactEmail: e.target.value }))}
+            className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Teléfono</label>
+          <input
+            type="text"
+            value={siteContent.contactPhone}
+            disabled={loading || saving}
+            onChange={(e) => setSiteContent((prev) => ({ ...prev, contactPhone: e.target.value }))}
+            className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">WhatsApp</label>
+          <input
+            type="text"
+            value={siteContent.contactWhatsapp}
+            disabled={loading || saving}
+            onChange={(e) => setSiteContent((prev) => ({ ...prev, contactWhatsapp: e.target.value }))}
+            className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Instagram (usuario o URL)</label>
+          <input
+            type="text"
+            value={siteContent.contactInstagram}
+            disabled={loading || saving}
+            onChange={(e) => setSiteContent((prev) => ({ ...prev, contactInstagram: e.target.value }))}
+            className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm"
+            placeholder="https://www.instagram.com/..."
+          />
+        </div>
+        <div className="md:col-span-2">
+          <label className="block text-xs text-gray-400 mb-1">Dirección u obrador</label>
+          <input
+            type="text"
+            value={siteContent.contactAddress}
+            disabled={loading || saving}
+            onChange={(e) => setSiteContent((prev) => ({ ...prev, contactAddress: e.target.value }))}
+            className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm"
+          />
+        </div>
+        <div className="md:col-span-2">
+          <label className="block text-xs text-gray-400 mb-1">Texto de recogida</label>
+          <textarea
+            value={siteContent.deliveryPickupText}
+            disabled={loading || saving}
+            onChange={(e) => setSiteContent((prev) => ({ ...prev, deliveryPickupText: e.target.value }))}
+            className="w-full min-h-24 px-3 py-2 rounded-lg border border-gray-700 text-sm"
+          />
+        </div>
+        <div className="md:col-span-2">
+          <label className="block text-xs text-gray-400 mb-1">Texto de reparto local</label>
+          <textarea
+            value={siteContent.deliveryLocalText}
+            disabled={loading || saving}
+            onChange={(e) => setSiteContent((prev) => ({ ...prev, deliveryLocalText: e.target.value }))}
+            className="w-full min-h-24 px-3 py-2 rounded-lg border border-gray-700 text-sm"
+          />
+        </div>
+        <div className="md:col-span-2">
+          <label className="block text-xs text-gray-400 mb-1">Texto de mensajería urgente</label>
+          <textarea
+            value={siteContent.deliveryCourierText}
+            disabled={loading || saving}
+            onChange={(e) => setSiteContent((prev) => ({ ...prev, deliveryCourierText: e.target.value }))}
+            className="w-full min-h-24 px-3 py-2 rounded-lg border border-gray-700 text-sm"
+          />
+        </div>
+      </div>
+
+      <SiteContentActions
+        loading={loading}
+        saving={saving}
+        message={message}
+        onSave={onSave}
+        onReset={onReset}
+      />
+    </div>
+  )
+}
+
+function DeliveryConfigAdmin({
+  preventa,
+  setPreventa,
+  loadingPreventa,
+  savingPreventa,
+  preventaMsg,
+  onRefreshPreventa,
+  onSavePreventa,
+  onResetPreventa,
+  shippingCosts,
+  setShippingCosts,
+  loadingShipping,
+  savingShipping,
+  shippingMsg,
+  onSaveShipping,
+  onResetShipping,
+  pickupPoints,
+  pickupDraft,
+  setPickupDraft,
+  editingPickupId,
+  loadingPickupPoints,
+  savingPickupPoint,
+  pickupPointsMsg,
+  onRefreshPickupPoints,
+  onEditPickupPoint,
+  onCancelEditPickupPoint,
+  onSavePickupPoint,
+  onDeletePickupPoint,
+}: DeliveryConfigAdminProps) {
+  const timeOptions = Array.from({ length: 24 }, (_, hour) => hour)
+  const minuteOptions = [0, 15, 30, 45]
+
+  const updatePreventa = <K extends keyof PreventaConfig>(key: K, value: PreventaConfig[K]) => {
+    setPreventa((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const updatePickupDraft = <K extends keyof PickupPointDraft>(key: K, value: PickupPointDraft[K]) => {
+    setPickupDraft((prev) => ({ ...prev, [key]: value }))
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-gray-700">
+          <div>
+            <h2 className="font-semibold text-white text-sm">Ventana semanal de preventa</h2>
+            <p className="text-xs text-gray-400 mt-1">Configura cuándo abre y cierra el período de pedidos.</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={onRefreshPreventa}
+              disabled={loadingPreventa || savingPreventa}
+              className="px-3 py-2 bg-white text-gray-300 text-sm rounded-lg border border-gray-700 hover:bg-gray-100 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${loadingPreventa ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              onClick={onResetPreventa}
+              disabled={loadingPreventa || savingPreventa}
+              className="flex items-center gap-2 px-3 py-2 bg-red-900/30 text-red-400 text-sm rounded-lg border border-red-800 hover:bg-red-900/50 disabled:opacity-50"
+            >
+              <RotateCcw className="w-4 h-4" /> Restablecer
+            </button>
+            <button
+              onClick={onSavePreventa}
+              disabled={loadingPreventa || savingPreventa}
+              className="flex items-center gap-2 px-4 py-2 bg-brand-gold text-white text-sm rounded-lg hover:bg-brand-gold-dark disabled:opacity-50"
+            >
+              <Save className="w-4 h-4" /> {savingPreventa ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+        <div className="px-5 py-4 space-y-4">
+          <label className="flex items-center gap-2 text-sm font-medium text-gray-300">
+            <input
+              type="checkbox"
+              checked={preventa.enabled}
+              onChange={(e) => updatePreventa('enabled', e.target.checked)}
+              disabled={loadingPreventa || savingPreventa}
+            />
+            Activar restricción de preventa
+          </label>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Apertura</p>
+              <div className="grid grid-cols-3 gap-2">
+                <select
+                  value={preventa.openingDay}
+                  onChange={(e) => updatePreventa('openingDay', Number(e.target.value))}
+                  disabled={loadingPreventa || savingPreventa}
+                  className="col-span-2 px-3 py-2 rounded-lg border border-gray-700 text-sm"
+                >
+                  {DAY_OPTIONS.map((day) => (
+                    <option key={day.value} value={day.value}>{day.label}</option>
+                  ))}
+                </select>
+                <div className="flex gap-2">
+                  <select
+                    value={preventa.openingHour}
+                    onChange={(e) => updatePreventa('openingHour', Number(e.target.value))}
+                    disabled={loadingPreventa || savingPreventa}
+                    className="w-full px-2 py-2 rounded-lg border border-gray-700 text-sm"
+                  >
+                    {timeOptions.map((hour) => (
+                      <option key={hour} value={hour}>{String(hour).padStart(2, '0')}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={preventa.openingMinute}
+                    onChange={(e) => updatePreventa('openingMinute', Number(e.target.value))}
+                    disabled={loadingPreventa || savingPreventa}
+                    className="w-full px-2 py-2 rounded-lg border border-gray-700 text-sm"
+                  >
+                    {minuteOptions.map((minute) => (
+                      <option key={minute} value={minute}>{String(minute).padStart(2, '0')}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Cierre</p>
+              <div className="grid grid-cols-3 gap-2">
+                <select
+                  value={preventa.closingDay}
+                  onChange={(e) => updatePreventa('closingDay', Number(e.target.value))}
+                  disabled={loadingPreventa || savingPreventa}
+                  className="col-span-2 px-3 py-2 rounded-lg border border-gray-700 text-sm"
+                >
+                  {DAY_OPTIONS.map((day) => (
+                    <option key={day.value} value={day.value}>{day.label}</option>
+                  ))}
+                </select>
+                <div className="flex gap-2">
+                  <select
+                    value={preventa.closingHour}
+                    onChange={(e) => updatePreventa('closingHour', Number(e.target.value))}
+                    disabled={loadingPreventa || savingPreventa}
+                    className="w-full px-2 py-2 rounded-lg border border-gray-700 text-sm"
+                  >
+                    {timeOptions.map((hour) => (
+                      <option key={hour} value={hour}>{String(hour).padStart(2, '0')}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={preventa.closingMinute}
+                    onChange={(e) => updatePreventa('closingMinute', Number(e.target.value))}
+                    disabled={loadingPreventa || savingPreventa}
+                    className="w-full px-2 py-2 rounded-lg border border-gray-700 text-sm"
+                  >
+                    {minuteOptions.map((minute) => (
+                      <option key={minute} value={minute}>{String(minute).padStart(2, '0')}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-xs text-gray-400 bg-gray-700 border border-gray-700 rounded-lg px-3 py-2 flex items-center gap-2">
+            <Clock3 className="w-4 h-4 text-gray-400" />
+            Apertura {DAY_OPTIONS.find((d) => d.value === preventa.openingDay)?.label} {String(preventa.openingHour).padStart(2, '0')}:{String(preventa.openingMinute).padStart(2, '0')} · cierre {DAY_OPTIONS.find((d) => d.value === preventa.closingDay)?.label} {String(preventa.closingHour).padStart(2, '0')}:{String(preventa.closingMinute).padStart(2, '0')}
+          </div>
+
+          {preventaMsg && <p className={`text-sm ${preventaMsg.includes('guardada') || preventaMsg.includes('restablecida') ? 'text-green-600' : 'text-red-600'}`}>{preventaMsg}</p>}
+        </div>
+      </div>
+
+      <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-700">
+          <Truck className="w-4 h-4 text-brand-gold" />
+          <h3 className="font-semibold text-white text-sm">Costos de envío</h3>
+        </div>
+        <div className="px-5 py-4 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Envío local (AR$)</label>
+              <input
+                type="number"
+                min={0}
+                step="1"
+                value={shippingCosts.localDelivery}
+                disabled={loadingShipping || savingShipping}
+                onChange={(e) => setShippingCosts((prev) => ({ ...prev, localDelivery: Number(e.target.value) }))}
+                className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm"
+              />
+              <p className="text-xs text-gray-400 mt-1">{formatCurrency(shippingCosts.localDelivery)}</p>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Mensajería nacional (AR$)</label>
+              <input
+                type="number"
+                min={0}
+                step="1"
+                value={shippingCosts.nationalCourier}
+                disabled={loadingShipping || savingShipping}
+                onChange={(e) => setShippingCosts((prev) => ({ ...prev, nationalCourier: Number(e.target.value) }))}
+                className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm"
+              />
+              <p className="text-xs text-gray-400 mt-1">{formatCurrency(shippingCosts.nationalCourier)}</p>
+            </div>
+          </div>
+
+          <p className="text-xs text-gray-400">Recogida en punto siempre se mantiene en <strong>gratis</strong>.</p>
+          {shippingMsg && <p className="text-sm text-gray-300">{shippingMsg}</p>}
+
+          <div className="flex gap-2">
+            <button
+              onClick={onSaveShipping}
+              disabled={loadingShipping || savingShipping}
+              className="px-4 py-2 bg-brand-gold text-white text-sm font-medium rounded-lg hover:bg-brand-gold-dark disabled:opacity-50"
+            >
+              {savingShipping ? 'Guardando...' : 'Guardar costos'}
+            </button>
+            <button
+              onClick={onResetShipping}
+              disabled={loadingShipping || savingShipping}
+              className="px-4 py-2 bg-gray-700 text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-600 disabled:opacity-50"
+            >
+              Restablecer
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-gray-700">
+          <div>
+            <h3 className="font-semibold text-white text-sm">Puntos de recogida</h3>
+            <p className="text-xs text-gray-400 mt-1">Administrá los puntos visibles en checkout y su orden.</p>
+          </div>
+          <button
+            onClick={onRefreshPickupPoints}
+            disabled={loadingPickupPoints || savingPickupPoint}
+            className="px-3 py-2 bg-white text-gray-300 text-sm rounded-lg border border-gray-700 hover:bg-gray-100 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loadingPickupPoints ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+        <div className="px-5 py-4 space-y-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Nombre</label>
+              <input type="text" value={pickupDraft.name} disabled={savingPickupPoint} onChange={(e) => updatePickupDraft('name', e.target.value)} className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Horario</label>
+              <input type="text" value={pickupDraft.schedule} disabled={savingPickupPoint} onChange={(e) => updatePickupDraft('schedule', e.target.value)} className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm" placeholder="Ej: Viernes 10:00 a 14:00" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Dirección</label>
+              <input type="text" value={pickupDraft.address} disabled={savingPickupPoint} onChange={(e) => updatePickupDraft('address', e.target.value)} className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Ciudad</label>
+              <input type="text" value={pickupDraft.city} disabled={savingPickupPoint} onChange={(e) => updatePickupDraft('city', e.target.value)} className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Código postal</label>
+              <input type="text" value={pickupDraft.postalCode} disabled={savingPickupPoint} onChange={(e) => updatePickupDraft('postalCode', e.target.value)} className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Orden</label>
+              <input type="number" min={0} step="1" value={pickupDraft.order} disabled={savingPickupPoint} onChange={(e) => updatePickupDraft('order', Number(e.target.value))} className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs text-gray-400 mb-1">Instrucciones</label>
+              <textarea value={pickupDraft.instructions} disabled={savingPickupPoint} onChange={(e) => updatePickupDraft('instructions', e.target.value)} className="w-full min-h-24 px-3 py-2 rounded-lg border border-gray-700 text-sm" />
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm text-gray-300">
+            <input type="checkbox" checked={pickupDraft.isActive} disabled={savingPickupPoint} onChange={(e) => updatePickupDraft('isActive', e.target.checked)} />
+            Punto activo en checkout
+          </label>
+
+          {pickupPointsMsg && <p className={`text-sm ${pickupPointsMsg.includes('guardado') || pickupPointsMsg.includes('agregado') || pickupPointsMsg.includes('eliminado') ? 'text-green-600' : 'text-red-600'}`}>{pickupPointsMsg}</p>}
+
+          <div className="flex gap-2">
+            <button onClick={onSavePickupPoint} disabled={savingPickupPoint} className="flex items-center gap-2 px-4 py-2 bg-brand-gold text-white text-sm rounded-lg hover:bg-brand-gold-dark disabled:opacity-50">
+              {editingPickupId ? <Save className="w-4 h-4" /> : <Plus className="w-4 h-4" />} {savingPickupPoint ? 'Guardando...' : editingPickupId ? 'Actualizar punto' : 'Agregar punto'}
+            </button>
+            {editingPickupId && (
+              <button onClick={onCancelEditPickupPoint} disabled={savingPickupPoint} className="px-4 py-2 bg-gray-700 text-gray-300 text-sm rounded-lg hover:bg-gray-600 disabled:opacity-50">
+                Cancelar edición
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            {pickupPoints.map((point) => (
+              <div key={point.id} className="rounded-lg border border-gray-700 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-white flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-brand-gold" /> {point.name}
+                    </p>
+                    <p className="text-sm text-gray-300">{point.address}, {point.city} {point.postalCode}</p>
+                    <p className="text-xs text-gray-400">{point.schedule}</p>
+                    {point.instructions && <p className="text-xs text-gray-400">{point.instructions}</p>}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-medium px-2 py-1 rounded-full ${point.isActive ? 'bg-green-50 text-green-700' : 'bg-gray-700 text-gray-400'}`}>
+                      {point.isActive ? 'Activo' : 'Oculto'}
+                    </span>
+                    <button onClick={() => onEditPickupPoint(point)} disabled={savingPickupPoint} className="px-3 py-2 bg-gray-700 text-gray-300 text-xs rounded-lg hover:bg-gray-600 disabled:opacity-50">Editar</button>
+                    <button onClick={() => onDeletePickupPoint(point.id)} disabled={savingPickupPoint} className="px-3 py-2 bg-red-900/30 text-red-400 text-xs rounded-lg hover:bg-red-900/50 disabled:opacity-50">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {!pickupPoints.length && !loadingPickupPoints && (
+              <div className="rounded-lg border border-dashed border-gray-600 p-4 text-sm text-gray-400">
+                Todavía no hay puntos de recogida cargados.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SecurityConfigAdmin() {
+  const [currentPw, setCurrentPw] = useState('')
+  const [newPw, setNewPw] = useState('')
+  const [confirmPw, setConfirmPw] = useState('')
+  const [showCurrent, setShowCurrent] = useState(false)
+  const [showNew, setShowNew] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [logoutAllLoading, setLogoutAllLoading] = useState(false)
+
+  const passwordValid = newPw.length >= 8 && /[A-Z]/.test(newPw) && /[a-z]/.test(newPw) && /[0-9]/.test(newPw)
+  const passwordsMatch = newPw === confirmPw && confirmPw.length > 0
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setMessage(null)
+
+    try {
+      const res = await fetch('/api/admin/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword: currentPw, newPassword: newPw }),
+      })
+
+      const data = await res.json()
+
+      if (res.ok) {
+        setMessage({ type: 'success', text: data.message || 'Contraseña actualizada correctamente' })
+        setCurrentPw('')
+        setNewPw('')
+        setConfirmPw('')
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Error al cambiar la contraseña' })
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Error de conexión' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleLogoutAll = async () => {
+    setLogoutAllLoading(true)
+    try {
+      await fetch('/api/admin/login', { method: 'DELETE' })
+      window.location.href = '/admin/login'
+    } catch {
+      setLogoutAllLoading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Change Password */}
+      <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-700">
+          <Key className="w-4 h-4 text-brand-gold" />
+          <h3 className="font-semibold text-white text-sm">Cambiar contraseña</h3>
+        </div>
+        <form onSubmit={handleChangePassword} className="px-5 py-4 space-y-4">
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Contraseña actual *</label>
+            <div className="relative">
+              <input
+                type={showCurrent ? 'text' : 'password'}
+                value={currentPw}
+                onChange={(e) => setCurrentPw(e.target.value)}
+                autoComplete="current-password"
+                required
+                className="w-full px-3 py-2 pr-10 rounded-lg border border-gray-700 text-sm bg-gray-900 text-white"
+                placeholder="••••••••"
+              />
+              <button type="button" onClick={() => setShowCurrent(!showCurrent)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300">
+                {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Nueva contraseña *</label>
+            <div className="relative">
+              <input
+                type={showNew ? 'text' : 'password'}
+                value={newPw}
+                onChange={(e) => setNewPw(e.target.value)}
+                autoComplete="new-password"
+                required
+                className="w-full px-3 py-2 pr-10 rounded-lg border border-gray-700 text-sm bg-gray-900 text-white"
+                placeholder="••••••••"
+              />
+              <button type="button" onClick={() => setShowNew(!showNew)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300">
+                {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            {newPw && (
+              <div className="mt-2 space-y-1">
+                <div className="flex items-center gap-2 text-xs">
+                  <div className={`w-2 h-2 rounded-full ${newPw.length >= 8 ? 'bg-green-500' : 'bg-red-500'}`} />
+                  <span className={newPw.length >= 8 ? 'text-green-400' : 'text-red-400'}>Mínimo 8 caracteres</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <div className={`w-2 h-2 rounded-full ${/[A-Z]/.test(newPw) ? 'bg-green-500' : 'bg-red-500'}`} />
+                  <span className={/[A-Z]/.test(newPw) ? 'text-green-400' : 'text-red-400'}>Una mayúscula</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <div className={`w-2 h-2 rounded-full ${/[a-z]/.test(newPw) ? 'bg-green-500' : 'bg-red-500'}`} />
+                  <span className={/[a-z]/.test(newPw) ? 'text-green-400' : 'text-red-400'}>Una minúscula</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <div className={`w-2 h-2 rounded-full ${/[0-9]/.test(newPw) ? 'bg-green-500' : 'bg-red-500'}`} />
+                  <span className={/[0-9]/.test(newPw) ? 'text-green-400' : 'text-red-400'}>Un número</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Confirmar nueva contraseña *</label>
+            <input
+              type="password"
+              value={confirmPw}
+              onChange={(e) => setConfirmPw(e.target.value)}
+              autoComplete="new-password"
+              required
+              className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm bg-gray-900 text-white"
+              placeholder="••••••••"
+            />
+            {confirmPw && !passwordsMatch && (
+              <p className="text-xs text-red-400 mt-1">Las contraseñas no coinciden</p>
+            )}
+          </div>
+
+          {message && (
+            <p className={`text-sm px-3 py-2 rounded-lg ${message.type === 'success' ? 'text-green-400 bg-green-900/30' : 'text-red-400 bg-red-900/30'}`}>
+              {message.text}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading || !currentPw || !passwordValid || !passwordsMatch}
+            className="px-4 py-2 bg-brand-gold text-white text-sm font-medium rounded-lg hover:bg-brand-gold-dark disabled:opacity-50 flex items-center gap-2"
+          >
+            {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+            Actualizar contraseña
+          </button>
+        </form>
+      </div>
+
+      {/* Sessions */}
+      <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-700">
+          <LogOut className="w-4 h-4 text-brand-gold" />
+          <h3 className="font-semibold text-white text-sm">Sesiones</h3>
+        </div>
+        <div className="px-5 py-4 space-y-3">
+          <p className="text-sm text-gray-400">
+            Cerrar todas las sesiones activas incluyendo esta. Te pedirá ingresar la contraseña de nuevo.
+          </p>
+          <button
+            onClick={handleLogoutAll}
+            disabled={logoutAllLoading}
+            className="flex items-center gap-2 px-4 py-2 bg-red-900/30 text-red-400 text-sm font-medium rounded-lg hover:bg-red-900/50 transition-colors border border-red-800 disabled:opacity-50"
+          >
+            {logoutAllLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogOut className="w-4 h-4" />}
+            Cerrar todas las sesiones
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function AdminConfigPage() {
+  const router = useRouter();
+  const [loadingShipping, setLoadingShipping] = useState(true);
+  const [savingShipping, setSavingShipping] = useState(false)
+  const [shippingMsg, setShippingMsg] = useState<string | null>(null)
+  const [shippingCosts, setShippingCosts] = useState({
+    pickupPoint: 0,
+    localDelivery: 3500,
+    nationalCourier: 5950,
+  })
+
+  // Theme customization
+  const [loadingTheme, setLoadingTheme] = useState(true)
+  const [savingTheme, setSavingTheme] = useState(false)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [uploadingHeroImage, setUploadingHeroImage] = useState(false)
+  const [themeMsg, setThemeMsg] = useState<string | null>(null)
+  const [theme, setTheme] = useState({
+    appTitle: 'Bendito Cross',
+    appSubtitle: 'Indumentaria Deportiva y Equipamiento',
+    logoUrl: '/img/benditocross.png',
+    primaryColor: '#FF0000',
+    primaryHover: '#CC0000',
+    secondaryColor: '#1A1A1A',
+    accentColor: '#333333',
+    bgBody: '#1A1A1A',
+    bgCard: '#2A2A2A',
+    textPrimary: '#FFFFFF',
+    textMuted: '#B0B0B0',
+    fontHeading: "'Impact', 'Arial Narrow Bold', sans-serif",
+    fontBody: "'Arial', sans-serif",
+    fontSizeTitle: 'clamp(1rem, 2.5vw, 1.5rem)',
+    logoSize: '36',
+    titleAlign: 'left',
+    borderColor: '#333333',
+    mutedBg: '#333333',
+    hoverBg: '#3A3A3A',
+    sidebarBg: '#1A1A1A',
+    sidebarText: '#FFFFFF',
+    successColor: '#10b981',
+    warningColor: '#f59e0b',
+    errorColor: '#ef4444',
+    headerMaxWidth: '1280px',
+    heroTitle: 'Equipamiento Deportivo',
+    heroSubtitle: 'Indumentaria para CrossFit y entrenamiento funcional.',
+    heroImageUrl: '/img/hero-bg.png',
+    infoTitle1: 'Ropa Deportiva',
+    infoSubtitle1: 'Camisetas, pantalones, shorts y accesorios para entrenar.',
+    infoTitle2: 'Equipamiento',
+    infoSubtitle2: 'Barras, bandas, guantes y equipamiento para CrossFit.',
+    infoTitle3: 'Suplementos',
+    infoSubtitle3: 'Proteínas, creatina y suplementos para optimizar tu rendimiento.',
+  })
+  const [loadingPayments, setLoadingPayments] = useState(true)
+  const [paymentSettings, setPaymentSettings] = useState<{
+    defaultProvider: 'STRIPE' | 'MERCADO_PAGO' | 'BANK_TRANSFER'
+    enabledProviders: Array<'STRIPE' | 'MERCADO_PAGO' | 'BANK_TRANSFER'>
+    options: Array<{ value: 'STRIPE' | 'MERCADO_PAGO' | 'BANK_TRANSFER'; label: string; enabled: boolean; description?: string }>
+    bankTransfer: {
+      enabled: boolean
+      bankName: string
+      accountHolder: string
+      alias: string
+      cbu: string
+      cuit: string
+      notes: string
+    }
+  }>({
+    defaultProvider: 'STRIPE',
+    enabledProviders: [],
+    options: [],
+    bankTransfer: {
+      enabled: false,
+      bankName: '',
+      accountHolder: '',
+      alias: '',
+      cbu: '',
+      cuit: '',
+      notes: '',
+    },
+  })
+  const [loadingSiteContent, setLoadingSiteContent] = useState(true)
+  const [savingSiteContent, setSavingSiteContent] = useState(false)
+  const [siteContentMsg, setSiteContentMsg] = useState<string | null>(null)
+  const [siteContent, setSiteContent] = useState<SiteContent>(DEFAULT_SITE_CONTENT)
+  const [loadingPreventa, setLoadingPreventa] = useState(true)
+  const [savingPreventa, setSavingPreventa] = useState(false)
+  const [preventaMsg, setPreventaMsg] = useState<string | null>(null)
+  const [preventa, setPreventa] = useState<PreventaConfig>(DEFAULT_PREVENTA_CONFIG)
+  const [loadingPickupPoints, setLoadingPickupPoints] = useState(true)
+  const [savingPickupPoint, setSavingPickupPoint] = useState(false)
+  const [pickupPointsMsg, setPickupPointsMsg] = useState<string | null>(null)
+  const [pickupPoints, setPickupPoints] = useState<PickupPoint[]>([])
+  const [pickupDraft, setPickupDraft] = useState<PickupPointDraft>(EMPTY_PICKUP_POINT)
+  const [editingPickupId, setEditingPickupId] = useState<string | null>(null)
+
+  const fetchShippingCosts = async () => {
+    setLoadingShipping(true)
+    setShippingMsg(null)
+    try {
+      const res = await fetch('/api/admin/envios')
+      if (!res.ok) throw new Error()
+      const data = await res.json()
+      setShippingCosts({
+        pickupPoint: Number(data.pickupPoint ?? 0),
+        localDelivery: Number(data.localDelivery ?? 3500),
+        nationalCourier: Number(data.nationalCourier ?? 5950),
+      })
+    } catch {
+      setShippingMsg('No se pudieron cargar los costos de envío')
+    } finally {
+      setLoadingShipping(false)
+    }
+  }
+
+  const fetchThemeConfig = async () => {
+    setLoadingTheme(true)
+    setThemeMsg(null)
+    try {
+      const res = await fetch('/api/admin/tema')
+      if (!res.ok) throw new Error()
+      const data = await res.json()
+      setTheme(data)
+    } catch {
+      setThemeMsg('No se pudo cargar la configuración del tema')
+    } finally {
+      setLoadingTheme(false)
+    }
+  }
+
+  const fetchPaymentSettings = async () => {
+    setLoadingPayments(true)
+    try {
+      const res = await fetch('/api/admin/pagos')
+      if (!res.ok) throw new Error()
+      const data = await res.json()
+      setPaymentSettings(data)
+    } catch {
+      // noop: la página dedicada de pagos maneja mensajes detallados
+    } finally {
+      setLoadingPayments(false)
+    }
+  }
+
+  const fetchSiteContent = async () => {
+    setLoadingSiteContent(true)
+    setSiteContentMsg(null)
+    try {
+      const res = await fetch('/api/admin/site-content')
+      if (!res.ok) throw new Error()
+      const data = await res.json()
+      setSiteContent(data)
+    } catch {
+      setSiteContentMsg('No se pudo cargar la configuración del contenido del sitio')
+    } finally {
+      setLoadingSiteContent(false)
+    }
+  }
+
+  const fetchPreventa = async () => {
+    setLoadingPreventa(true)
+    setPreventaMsg(null)
+    try {
+      const res = await fetch('/api/admin/preventa')
+      if (!res.ok) throw new Error()
+      const data = await res.json()
+      setPreventa(data)
+    } catch {
+      setPreventaMsg('No se pudo cargar la configuración de preventa')
+      setPreventa(DEFAULT_PREVENTA_CONFIG)
+    } finally {
+      setLoadingPreventa(false)
+    }
+  }
+
+  const fetchPickupPoints = async () => {
+    setLoadingPickupPoints(true)
+    setPickupPointsMsg(null)
+    try {
+      const res = await fetch('/api/admin/puntos-recogida')
+      if (!res.ok) throw new Error()
+      const data = await res.json()
+      setPickupPoints(data.puntos ?? [])
+    } catch {
+      setPickupPointsMsg('No se pudieron cargar los puntos de recogida')
+    } finally {
+      setLoadingPickupPoints(false)
+    }
+  }
+
+  useEffect(() => {
+    void fetchShippingCosts()
+    void fetchThemeConfig()
+    void fetchPaymentSettings()
+    void fetchSiteContent()
+    void fetchPreventa()
+    void fetchPickupPoints()
+  }, [])
+
+  const handleSaveShipping = async () => {
+    setSavingShipping(true)
+    setShippingMsg(null)
+    try {
+      const res = await fetch('/api/admin/envios', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          localDelivery: Math.max(0, shippingCosts.localDelivery),
+          nationalCourier: Math.max(0, shippingCosts.nationalCourier),
+        }),
+      })
+      if (!res.ok) throw new Error()
+      setShippingMsg('Costos de envío actualizados')
+    } catch {
+      setShippingMsg('No se pudieron guardar los costos de envío')
+    } finally {
+      setSavingShipping(false)
+    }
+  }
+
+  const handleResetShipping = async () => {
+    setSavingShipping(true)
+    setShippingMsg(null)
+    try {
+      const res = await fetch('/api/admin/envios', { method: 'DELETE' })
+      if (!res.ok) throw new Error()
+      await fetchShippingCosts()
+      setShippingMsg('Costos restablecidos a valores por defecto')
+    } catch {
+      setShippingMsg('No se pudieron restablecer los costos')
+    } finally {
+      setSavingShipping(false)
+    }
+  }
+
+  const handleSaveTheme = async () => {
+    setSavingTheme(true)
+    setThemeMsg(null)
+    try {
+      console.log('[Save Theme] Enviando:', theme)
+      const res = await fetch('/api/admin/tema', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(theme),
+      })
+      const data = await res.json()
+      console.log('[Save Theme] Respuesta:', { status: res.status, data })
+      if (!res.ok) {
+        throw new Error(data.error || `Error ${res.status}`)
+      }
+      setThemeMsg('Configuración actualizada correctamente')
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'No se pudo guardar la configuración'
+      console.error('[Save Theme] Error:', errorMsg)
+      setThemeMsg(`No se pudo guardar la configuración: ${errorMsg}`)
+    } finally {
+      setSavingTheme(false)
+    }
+  }
+
+  const handleResetTheme = async () => {
+    setSavingTheme(true)
+    setThemeMsg(null)
+    try {
+      const res = await fetch('/api/admin/tema', { method: 'DELETE' })
+      if (!res.ok) throw new Error()
+      await fetchThemeConfig()
+      setThemeMsg('Tema restablecido a valores por defecto')
+    } catch {
+      setThemeMsg('No se pudo restablecer el tema')
+    } finally {
+      setSavingTheme(false)
+    }
+  }
+
+  const handleSaveSiteContent = async () => {
+    setSavingSiteContent(true)
+    setSiteContentMsg(null)
+    try {
+      const res = await fetch('/api/admin/site-content', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(siteContent),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'No se pudo guardar el contenido')
+      setSiteContentMsg('Configuración del contenido actualizada')
+      await fetchSiteContent()
+    } catch (error) {
+      setSiteContentMsg(error instanceof Error ? error.message : 'No se pudo guardar el contenido')
+    } finally {
+      setSavingSiteContent(false)
+    }
+  }
+
+  const handleResetSiteContent = async () => {
+    setSavingSiteContent(true)
+    setSiteContentMsg(null)
+    try {
+      const res = await fetch('/api/admin/site-content', { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'No se pudo restablecer el contenido')
+      await fetchSiteContent()
+      setSiteContentMsg('Configuración del contenido restablecida')
+    } catch (error) {
+      setSiteContentMsg(error instanceof Error ? error.message : 'No se pudo restablecer el contenido')
+    } finally {
+      setSavingSiteContent(false)
+    }
+  }
+
+  const handleSavePreventa = async () => {
+    setSavingPreventa(true)
+    setPreventaMsg(null)
+    try {
+      const res = await fetch('/api/admin/preventa', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(preventa),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'No se pudo guardar la configuración')
+      setPreventaMsg('Configuración de preventa guardada')
+    } catch (error) {
+      setPreventaMsg(error instanceof Error ? error.message : 'No se pudo guardar la configuración de preventa')
+    } finally {
+      setSavingPreventa(false)
+    }
+  }
+
+  const handleResetPreventa = async () => {
+    setSavingPreventa(true)
+    setPreventaMsg(null)
+    try {
+      const res = await fetch('/api/admin/preventa', { method: 'DELETE' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'No se pudo restablecer la configuración')
+      await fetchPreventa()
+      setPreventaMsg('Configuración de preventa restablecida')
+    } catch (error) {
+      setPreventaMsg(error instanceof Error ? error.message : 'No se pudo restablecer la configuración de preventa')
+    } finally {
+      setSavingPreventa(false)
+    }
+  }
+
+  const handleEditPickupPoint = (point: PickupPoint) => {
+    const { id: _id, ...draft } = point
+    setEditingPickupId(point.id)
+    setPickupDraft({ ...draft, instructions: point.instructions ?? '' })
+    setPickupPointsMsg(null)
+  }
+
+  const handleCancelEditPickupPoint = () => {
+    setEditingPickupId(null)
+    setPickupDraft(EMPTY_PICKUP_POINT)
+    setPickupPointsMsg(null)
+  }
+
+  const handleSavePickupPoint = async () => {
+    if (!pickupDraft.name.trim() || !pickupDraft.address.trim() || !pickupDraft.city.trim() || !pickupDraft.schedule.trim()) {
+      setPickupPointsMsg('Completá al menos nombre, dirección, ciudad y horario del punto')
+      return
+    }
+
+    setSavingPickupPoint(true)
+    setPickupPointsMsg(null)
+    try {
+      const payload = editingPickupId ? { id: editingPickupId, ...pickupDraft } : pickupDraft
+      const res = await fetch('/api/admin/puntos-recogida', {
+        method: editingPickupId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'No se pudo guardar el punto de recogida')
+      await fetchPickupPoints()
+      setEditingPickupId(null)
+      setPickupDraft(EMPTY_PICKUP_POINT)
+      setPickupPointsMsg(editingPickupId ? 'Punto de recogida guardado' : 'Punto de recogida agregado')
+    } catch (error) {
+      setPickupPointsMsg(error instanceof Error ? error.message : 'No se pudo guardar el punto de recogida')
+    } finally {
+      setSavingPickupPoint(false)
+    }
+  }
+
+  const handleDeletePickupPoint = async (id: string) => {
+    setSavingPickupPoint(true)
+    setPickupPointsMsg(null)
+    try {
+      const res = await fetch('/api/admin/puntos-recogida', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'No se pudo eliminar el punto de recogida')
+      await fetchPickupPoints()
+      if (editingPickupId === id) {
+        setEditingPickupId(null)
+        setPickupDraft(EMPTY_PICKUP_POINT)
+      }
+      setPickupPointsMsg('Punto de recogida eliminado')
+    } catch (error) {
+      setPickupPointsMsg(error instanceof Error ? error.message : 'No se pudo eliminar el punto de recogida')
+    } finally {
+      setSavingPickupPoint(false)
+    }
+  }
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.currentTarget.files?.[0]
+    if (!file) return
+
+    setUploadingLogo(true)
+    setThemeMsg(null)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('type', 'logo')
+
+      const res = await fetch('/api/admin/uploads/logo', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al cargar el logo')
+
+      setTheme({ ...theme, logoUrl: data.url })
+      setThemeMsg('Logo cargado correctamente')
+      
+      // Limpiar el input - usar getElementById en lugar de e.currentTarget
+      const logoInput = document.getElementById('logo-upload') as HTMLInputElement
+      if (logoInput) {
+        logoInput.value = ''
+      }
+    } catch (error) {
+      setThemeMsg(`Error: ${error instanceof Error ? error.message : 'No se pudo cargar el logo'}`)
+    } finally {
+      setUploadingLogo(false)
+    }
+  }
+
+  const handleHeroImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.currentTarget.files?.[0]
+    if (!file) return
+
+    setUploadingHeroImage(true)
+    setThemeMsg(null)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('type', 'hero')
+
+      const res = await fetch('/api/admin/uploads/logo', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al cargar la imagen de fondo del hero')
+
+      setTheme({ ...theme, heroImageUrl: data.url })
+      setThemeMsg('Imagen de fondo cargada correctamente')
+
+      // Limpiar el input
+      const heroImageInput = document.getElementById('hero-image-upload') as HTMLInputElement
+      if (heroImageInput) {
+        heroImageInput.value = ''
+      }
+    } catch (error) {
+      setThemeMsg(`Error: ${error instanceof Error ? error.message : 'No se pudo cargar la imagen de fondo del hero'}`)
+    } finally {
+      setUploadingHeroImage(false)
+    }
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-8 admin-config">
+      <h1 className="text-2xl font-bold mb-6 flex items-center gap-2" style={{ color: 'white' }}>
+        <Settings className="w-6 h-6 text-brand-gold" /> Configuración
+      </h1>
+
+      <Tabs.Root defaultValue="entrega" className="w-full">
+        <Tabs.List className="inline-flex flex-wrap gap-2 bg-gray-700 p-1 rounded-lg mb-6 overflow-x-auto">
+          {([
+            { value: 'entrega', icon: Truck, label: 'Entrega' },
+            { value: 'header', icon: Layout, label: 'Header' },
+            { value: 'footer', icon: Palette, label: 'Footer' },
+            { value: 'estilos', icon: Palette, label: 'Colores y Estilos' },
+            { value: 'nav', icon: Info, label: 'Nav' },
+            { value: 'sobre', icon: Info, label: 'Nosotros' },
+            { value: 'contacto', icon: Mail, label: 'Contacto' },
+            { value: 'seguridad', icon: Settings, label: 'Seguridad' },
+            { value: 'pagos', icon: Settings, label: 'Pagos' },
+          ] as const).map((tab) => {
+            const Icon = tab.icon
+            return (
+              <Tabs.Trigger
+                key={tab.value}
+                value={tab.value}
+                className="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-md transition-all bg-white text-gray-300 border border-gray-700 shadow-sm data-[state=active]:bg-brand-gold data-[state=active]:text-white data-[state=active]:border-brand-gold data-[state=active]:shadow-none hover:bg-gray-100"
+              >
+                <Icon className="w-4 h-4" /> {tab.label}
+              </Tabs.Trigger>
+            )
+          })}
+        </Tabs.List>
+
+        <Tabs.Content value="entrega">
+          <DeliveryConfigAdmin
+            preventa={preventa}
+            setPreventa={setPreventa}
+            loadingPreventa={loadingPreventa}
+            savingPreventa={savingPreventa}
+            preventaMsg={preventaMsg}
+            onRefreshPreventa={fetchPreventa}
+            onSavePreventa={handleSavePreventa}
+            onResetPreventa={handleResetPreventa}
+            shippingCosts={shippingCosts}
+            setShippingCosts={setShippingCosts}
+            loadingShipping={loadingShipping}
+            savingShipping={savingShipping}
+            shippingMsg={shippingMsg}
+            onSaveShipping={handleSaveShipping}
+            onResetShipping={handleResetShipping}
+            pickupPoints={pickupPoints}
+            pickupDraft={pickupDraft}
+            setPickupDraft={setPickupDraft}
+            editingPickupId={editingPickupId}
+            loadingPickupPoints={loadingPickupPoints}
+            savingPickupPoint={savingPickupPoint}
+            pickupPointsMsg={pickupPointsMsg}
+            onRefreshPickupPoints={fetchPickupPoints}
+            onEditPickupPoint={handleEditPickupPoint}
+            onCancelEditPickupPoint={handleCancelEditPickupPoint}
+            onSavePickupPoint={handleSavePickupPoint}
+            onDeletePickupPoint={handleDeletePickupPoint}
+          />
+        </Tabs.Content>
+
+        <Tabs.Content value="header" className="space-y-4">
+          {/* Título */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Título de la tienda</label>
+            <input
+              type="text"
+              value={theme.appTitle}
+              disabled={loadingTheme || savingTheme}
+              onChange={(e) => setTheme({ ...theme, appTitle: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm"
+              placeholder="Ej: Clara y Yema"
+            />
+          </div>
+
+          {/* Subtítulo */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Subtítulo/Lema</label>
+            <input
+              type="text"
+              value={theme.appSubtitle}
+              disabled={loadingTheme || savingTheme}
+              onChange={(e) => setTheme({ ...theme, appSubtitle: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm"
+              placeholder="Ej: Productos frescos de huerta directo al consumidor"
+            />
+          </div>
+
+          {/* Logo */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Logo de la tienda</label>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <label
+                  htmlFor="logo-upload"
+                  className={`flex-1 px-3 py-2 rounded-lg border border-gray-700 text-sm text-gray-300 cursor-pointer hover:bg-gray-100 transition-colors ${
+                    uploadingLogo ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                >
+                  {uploadingLogo ? 'Cargando...' : 'Seleccionar imagen'}
+                </label>
+                <input
+                  id="logo-upload"
+                  type="file"
+                  accept="image/*"
+                  disabled={loadingTheme || savingTheme || uploadingLogo}
+                  onChange={handleLogoUpload}
+                  className="hidden"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">O ingresa URL manualmente:</label>
+                <input
+                  type="url"
+                  value={theme.logoUrl}
+                  disabled={loadingTheme || savingTheme}
+                  onChange={(e) => setTheme({ ...theme, logoUrl: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm"
+                  placeholder="Ej: /img/logo.png"
+                />
+              </div>
+            </div>
+            {theme.logoUrl && (
+              <div className="mt-3 p-3 bg-gray-700 rounded-lg border border-gray-700">
+                <p className="text-xs text-gray-400 mb-2">Vista previa:</p>
+                <Image
+                  src={normalizePublicAssetUrl(theme.logoUrl) || '/img/web_clarayyema/Logo_color_CyY.png'}
+                  alt="Logo preview"
+                  width={64}
+                  height={64}
+                  className="h-16 object-contain"
+                  priority
+                  unoptimized={/^https?:\/\//i.test(normalizePublicAssetUrl(theme.logoUrl) || '/img/web_clarayyema/Logo_color_CyY.png')}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Tamaño del logo */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Tamaño del logo</label>
+            <select
+              value={theme.logoSize}
+              disabled={loadingTheme || savingTheme}
+              onChange={(e) => setTheme({ ...theme, logoSize: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm bg-gray-900 text-white"
+            >
+              <option value="24">24px — Chico</option>
+              <option value="32">32px — Mediano-chico</option>
+              <option value="40">40px — Mediano</option>
+              <option value="48">48px — Mediano-grande</option>
+              <option value="56">56px — Grande (predeterminado)</option>
+              <option value="64">64px — Extra grande</option>
+              <option value="80">80px — Máximo</option>
+            </select>
+            <div className="mt-2 flex items-center gap-2">
+              <Image
+                src={normalizePublicAssetUrl(theme.logoUrl) || '/img/web_clarayyema/Logo_color_CyY.png'}
+                alt="Logo preview size"
+                width={Number(theme.logoSize) || 64}
+                height={Number(theme.logoSize) || 64}
+                className="object-contain border border-gray-700 rounded"
+                unoptimized={/^https?:\/\//i.test(normalizePublicAssetUrl(theme.logoUrl) || '/img/web_clarayyema/Logo_color_CyY.png')}
+              />
+              <span className="text-xs text-gray-400">{theme.logoSize}px</span>
+            </div>
+          </div>
+
+          {/* Ancho del header */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Ancho maximo del header</label>
+            <select
+              value={theme.headerMaxWidth}
+              disabled={loadingTheme || savingTheme}
+              onChange={(e) => setTheme({ ...theme, headerMaxWidth: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm bg-gray-900 text-white"
+            >
+              <option value="100%">100% — Ancho completo</option>
+              <option value="960px">960px — Angosto</option>
+              <option value="1120px">1120px — Mediano</option>
+              <option value="1280px">1280px — Normal (predeterminado)</option>
+              <option value="1440px">1440px — Ancho</option>
+            </select>
+            <p className="text-[10px] text-gray-400 mt-0.5">
+              Controla el ancho maximo del contenedor del header. A menor valor, mas centrado quedara el contenido.
+            </p>
+          </div>
+
+          {/* Tipografía */}
+          <div>
+            <p className="text-xs font-semibold text-gray-300 mb-3 uppercase tracking-wide">Tipografía</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Fuente para títulos</label>
+                <select
+                  value={theme.fontHeading}
+                  disabled={loadingTheme || savingTheme}
+                  onChange={(e) => setTheme({ ...theme, fontHeading: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm bg-gray-900 text-white"
+                >
+                  <optgroup label="Sistema">
+                    <option value="system-ui">system-ui (predeterminado)</option>
+                    <option value="serif">Serif</option>
+                    <option value="sans-serif">Sans-serif</option>
+                    <option value="monospace">Monospace</option>
+                  </optgroup>
+                  <optgroup label="Google Fonts (títulos)">
+                    <option value="'Playfair Display', serif">Playfair Display</option>
+                    <option value="'Cormorant Garamond', serif">Cormorant Garamond</option>
+                    <option value="'Libre Baskerville', serif">Libre Baskerville</option>
+                    <option value="'DM Serif Display', serif">DM Serif Display</option>
+                    <option value="'Lora', serif">Lora</option>
+                  </optgroup>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Fuente para cuerpo de texto</label>
+                <select
+                  value={theme.fontBody}
+                  disabled={loadingTheme || savingTheme}
+                  onChange={(e) => setTheme({ ...theme, fontBody: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm bg-gray-900 text-white"
+                >
+                  <optgroup label="Sistema">
+                    <option value="system-ui">system-ui (predeterminado)</option>
+                    <option value="serif">Serif</option>
+                    <option value="sans-serif">Sans-serif</option>
+                    <option value="monospace">Monospace</option>
+                  </optgroup>
+                  <optgroup label="Google Fonts (cuerpo)">
+                    <option value="'Lato', sans-serif">Lato</option>
+                    <option value="'Montserrat', sans-serif">Montserrat</option>
+                    <option value="'Open Sans', sans-serif">Open Sans</option>
+                    <option value="'Raleway', sans-serif">Raleway</option>
+                    <option value="'Nunito', sans-serif">Nunito</option>
+                    <option value="'Work Sans', sans-serif">Work Sans</option>
+                  </optgroup>
+                </select>
+              </div>
+            </div>
+            <div className="mt-4">
+              <label className="block text-xs text-gray-400 mb-1">Tamaño del nombre de la app</label>
+              <select
+                value={theme.fontSizeTitle}
+                disabled={loadingTheme || savingTheme}
+                onChange={(e) => setTheme({ ...theme, fontSizeTitle: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm bg-gray-900 text-white"
+              >
+                <option value="clamp(0.875rem, 2vw, 1.125rem)">Pequeño</option>
+                <option value="clamp(1rem, 2.5vw, 1.5rem)">Normal (predeterminado)</option>
+                <option value="clamp(1.125rem, 3vw, 1.75rem)">Mediano</option>
+                <option value="clamp(1.25rem, 3.5vw, 2rem)">Grande</option>
+                <option value="clamp(1.375rem, 4vw, 2.25rem)">Extra grande</option>
+                <option value="clamp(1.5rem, 4.5vw, 2.5rem)">Muy grande</option>
+              </select>
+              <p className="text-[10px] text-gray-400 mt-0.5">
+                El tamaño se adapta automáticamente al ancho de pantalla. El máximo evita que se desborde.
+              </p>
+            </div>
+            <div className="mt-3">
+              <label className="block text-xs text-gray-400 mb-1">Alineación del título</label>
+              <div className="flex gap-2">
+                {(['left', 'center', 'right'] as const).map((align) => (
+                  <button
+                    key={align}
+                    type="button"
+                    disabled={loadingTheme || savingTheme}
+                    onClick={() => setTheme({ ...theme, titleAlign: align })}
+                    className={`flex-1 px-3 py-2 rounded-lg border text-sm transition-colors ${
+                      theme.titleAlign === align
+                        ? 'border-brand-gold bg-brand-gold/10 text-brand-gold-dark font-medium'
+                        : 'border-gray-700 bg-white text-gray-300 hover:bg-gray-100'
+                    }`}
+                  >
+                    {align === 'left' ? 'Izquierda' : align === 'center' ? 'Centrado' : 'Derecha'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="mt-3 flex flex-col gap-0.5 text-xs text-gray-400">
+              <span>Vista previa:</span>
+              <div style={{ textAlign: theme.titleAlign as any }}>
+                <span style={{ fontFamily: theme.fontHeading, fontSize: theme.fontSizeTitle }} className="font-bold text-white truncate block">
+                  {theme.appTitle || 'Clara y Yema'}
+                </span>
+                {theme.appSubtitle && (
+                  <span style={{ fontFamily: theme.fontBody }} className="text-[10px] text-gray-400 truncate block">
+                    {theme.appSubtitle}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Hero section */}
+          <div className="border-t border-gray-700 pt-4">
+            <p className="text-xs font-semibold text-gray-300 mb-3 uppercase tracking-wide">Hero / Header principal</p>
+            <div className="space-y-2">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Título principal</label>
+                <input
+                  type="text"
+                  value={theme.heroTitle}
+                  disabled={loadingTheme || savingTheme}
+                  onChange={(e) => setTheme({ ...theme, heroTitle: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm bg-gray-900 text-white"
+                  placeholder="Productos Frescos de Huerta"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Subtítulo</label>
+                <input
+                  type="text"
+                  value={theme.heroSubtitle}
+                  disabled={loadingTheme || savingTheme}
+                  onChange={(e) => setTheme({ ...theme, heroSubtitle: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm bg-gray-900 text-white"
+                  placeholder="Horneado fresco cada semana..."
+                />
+              </div>
+            </div>
+
+            {/* Imagen de fondo de la página */}
+            <div className="mt-3 border-t border-gray-700 pt-3">
+              <label className="block text-xs text-gray-400 mb-1">Imagen de fondo de la página</label>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <label
+                    htmlFor="hero-image-upload"
+                    className={`flex-1 px-3 py-2 rounded-lg border border-gray-700 text-sm text-gray-300 cursor-pointer hover:bg-gray-100 transition-colors ${
+                      uploadingHeroImage ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    {uploadingHeroImage ? 'Cargando...' : 'Seleccionar imagen'}
+                  </label>
+                  <input
+                    id="hero-image-upload"
+                    type="file"
+                    accept="image/*"
+                    disabled={loadingTheme || savingTheme || uploadingHeroImage}
+                    onChange={handleHeroImageUpload}
+                    className="hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">O ingresa URL manualmente:</label>
+                  <input
+                    type="url"
+                    value={theme.heroImageUrl}
+                    disabled={loadingTheme || savingTheme}
+                    onChange={(e) => setTheme({ ...theme, heroImageUrl: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm bg-gray-900 text-white"
+                    placeholder="/img/hero-bg.png"
+                  />
+                </div>
+              </div>
+              {theme.heroImageUrl && (
+                <div className="mt-3 p-3 bg-gray-700 rounded-lg border border-gray-700">
+                  <p className="text-xs text-gray-400 mb-2">Vista previa:</p>
+                  <Image
+                    src={normalizePublicAssetUrl(theme.heroImageUrl) || '/img/hero-bg.png'}
+                    alt="Vista previa de la imagen de fondo del hero"
+                    width={1600}
+                    height={900}
+                    className="h-32 w-full object-cover rounded"
+                    unoptimized={/^https?:\/\//i.test(normalizePublicAssetUrl(theme.heroImageUrl) || '/img/hero-bg.png')}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Info section texts */}
+          <div className="border-t border-gray-700 pt-4">
+            <p className="text-xs font-semibold text-gray-300 mb-3 uppercase tracking-wide">Sección de información (home)</p>
+            {([
+              { num: 1, titleKey: 'infoTitle1' as const, subKey: 'infoSubtitle1' as const, titleLabel: 'Título 1', subLabel: 'Subtítulo 1' },
+              { num: 2, titleKey: 'infoTitle2' as const, subKey: 'infoSubtitle2' as const, titleLabel: 'Título 2', subLabel: 'Subtítulo 2' },
+              { num: 3, titleKey: 'infoTitle3' as const, subKey: 'infoSubtitle3' as const, titleLabel: 'Título 3', subLabel: 'Subtítulo 3' },
+            ]).map(({ num, titleKey, subKey, titleLabel, subLabel }) => (
+              <div key={num} className="mb-3 pb-3 border-b border-gray-700 last:border-b-0 last:mb-0 last:pb-0">
+                <p className="text-xs text-gray-400 mb-2">Columna {num}</p>
+                <div className="space-y-2">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">{titleLabel}</label>
+                    <input
+                      type="text"
+                      value={(theme as any)[titleKey]}
+                      disabled={loadingTheme || savingTheme}
+                      onChange={(e) => setTheme({ ...theme, [titleKey]: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm"
+                      placeholder="Título"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">{subLabel}</label>
+                    <input
+                      type="text"
+                      value={(theme as any)[subKey]}
+                      disabled={loadingTheme || savingTheme}
+                      onChange={(e) => setTheme({ ...theme, [subKey]: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-700 text-sm"
+                      placeholder="Subtítulo"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {themeMsg && (
+            <div>
+              <p className={`text-sm ${typeof themeMsg === 'string' && themeMsg?.includes('correctamente') ? 'text-green-600' : 'text-red-600'}`}>
+                {themeMsg}
+              </p>
+            </div>
+          )}
+
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={handleSaveTheme}
+              disabled={loadingTheme || savingTheme}
+              className="px-4 py-2 bg-brand-gold text-white text-sm font-medium rounded-lg hover:bg-brand-gold-dark disabled:opacity-50"
+            >
+              {savingTheme ? 'Guardando...' : 'Guardar header'}
+            </button>
+            <button
+              onClick={handleResetTheme}
+              disabled={loadingTheme || savingTheme}
+              className="px-4 py-2 bg-gray-700 text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-600 disabled:opacity-50"
+            >
+              Restablecer
+            </button>
+          </div>
+        </Tabs.Content>
+
+        <Tabs.Content value="footer" className="space-y-4">
+          <FooterConfigAdmin
+            siteContent={siteContent}
+            setSiteContent={setSiteContent}
+            loading={loadingSiteContent}
+            saving={savingSiteContent}
+            message={siteContentMsg}
+            onSave={handleSaveSiteContent}
+            onReset={handleResetSiteContent}
+          />
+        </Tabs.Content>
+
+        <Tabs.Content value="estilos">
+          <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 space-y-4">
+            <h2 className="text-lg font-bold text-white">Colores y estilos</h2>
+            {/* Colores */}
+            <div>
+              <p className="text-xs font-semibold text-gray-300 mb-3 uppercase tracking-wide">Colores de la marca</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {([
+                  { key: 'primaryColor', label: 'Primario (botones, links, acentos)' },
+                  { key: 'primaryHover', label: 'Primario hover' },
+                  { key: 'secondaryColor', label: 'Secundario (headers)' },
+                  { key: 'accentColor', label: 'Acento' },
+                  { key: 'bgBody', label: 'Fondo del body' },
+                  { key: 'bgCard', label: 'Fondo de tarjetas' },
+                  { key: 'textPrimary', label: 'Texto principal' },
+                  { key: 'textMuted', label: 'Texto secundario' },
+                ] as const).map(({ key, label }) => (
+                  <div key={key}>
+                    <label className="block text-xs text-gray-400 mb-1">{label}</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="color"
+                        value={(theme as any)[key]}
+                        disabled={loadingTheme || savingTheme}
+                        onChange={(e) => setTheme({ ...theme, [key]: e.target.value })}
+                        className="h-10 w-16 rounded border border-gray-700 cursor-pointer shrink-0"
+                      />
+                      <input
+                        type="text"
+                        value={(theme as any)[key]}
+                        disabled={loadingTheme || savingTheme}
+                        onChange={(e) => setTheme({ ...theme, [key]: e.target.value })}
+                        className="flex-1 px-3 py-2 rounded-lg border border-gray-700 text-xs font-mono"
+                        placeholder="#000000"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="border-t border-gray-700 pt-4">
+              <p className="text-xs font-semibold text-gray-300 mb-3 uppercase tracking-wide">Superficies y bordes</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {([
+                  { key: 'borderColor', label: 'Color de bordes' },
+                  { key: 'mutedBg', label: 'Fondo de superficies secundarias' },
+                  { key: 'hoverBg', label: 'Fondo al pasar el mouse' },
+                  { key: 'sidebarBg', label: 'Fondo del panel lateral' },
+                  { key: 'sidebarText', label: 'Texto del panel lateral' },
+                ] as const).map(({ key, label }) => (
+                  <div key={key}>
+                    <label className="block text-xs text-gray-400 mb-1">{label}</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="color"
+                        value={(theme as any)[key]}
+                        disabled={loadingTheme || savingTheme}
+                        onChange={(e) => setTheme({ ...theme, [key]: e.target.value })}
+                        className="h-10 w-16 rounded border border-gray-700 cursor-pointer shrink-0"
+                      />
+                      <input
+                        type="text"
+                        value={(theme as any)[key]}
+                        disabled={loadingTheme || savingTheme}
+                        onChange={(e) => setTheme({ ...theme, [key]: e.target.value })}
+                        className="flex-1 px-3 py-2 rounded-lg border border-gray-700 text-xs font-mono"
+                        placeholder="#000000"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="border-t border-gray-700 pt-4">
+              <p className="text-xs font-semibold text-gray-300 mb-3 uppercase tracking-wide">Estados y feedback</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {([
+                  { key: 'successColor', label: 'Éxito / confirmación' },
+                  { key: 'warningColor', label: 'Advertencia' },
+                  { key: 'errorColor', label: 'Error / peligro' },
+                ] as const).map(({ key, label }) => (
+                  <div key={key}>
+                    <label className="block text-xs text-gray-400 mb-1">{label}</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="color"
+                        value={(theme as any)[key]}
+                        disabled={loadingTheme || savingTheme}
+                        onChange={(e) => setTheme({ ...theme, [key]: e.target.value })}
+                        className="h-10 w-16 rounded border border-gray-700 cursor-pointer shrink-0"
+                      />
+                      <input
+                        type="text"
+                        value={(theme as any)[key]}
+                        disabled={loadingTheme || savingTheme}
+                        onChange={(e) => setTheme({ ...theme, [key]: e.target.value })}
+                        className="flex-1 px-3 py-2 rounded-lg border border-gray-700 text-xs font-mono"
+                        placeholder="#000000"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="border-t border-gray-700 pt-4">
+              <p className="text-xs font-semibold text-gray-300 mb-3 uppercase tracking-wide">Fondos de secciones</p>
+              <p className="text-xs text-gray-500 mb-3">Color y transparencia de cada sección del home</p>
+              <div className="space-y-4">
+                {([
+                  { bgKey: 'sectionHeaderBg', opacityKey: 'sectionHeaderOpacity', label: 'Header' },
+                  { bgKey: 'sectionHeroBg', opacityKey: 'sectionHeroOpacity', label: 'Hero' },
+                  { bgKey: 'sectionProductsBg', opacityKey: 'sectionProductsOpacity', label: 'Productos' },
+                  { bgKey: 'sectionInfoBg', opacityKey: 'sectionInfoOpacity', label: 'Info' },
+                  { bgKey: 'sectionFooterBg', opacityKey: 'sectionFooterOpacity', label: 'Footer' },
+                ] as const).map(({ bgKey, opacityKey, label }) => (
+                  <div key={bgKey} className="flex items-center gap-3">
+                    <label className="text-xs text-gray-400 w-20 shrink-0">{label}</label>
+                    <input
+                      type="color"
+                      value={(theme as any)[bgKey]}
+                      disabled={loadingTheme || savingTheme}
+                      onChange={(e) => setTheme({ ...theme, [bgKey]: e.target.value })}
+                      className="h-8 w-12 rounded border border-gray-700 cursor-pointer shrink-0"
+                    />
+                    <div className="flex items-center gap-2 flex-1">
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={(theme as any)[opacityKey]}
+                        disabled={loadingTheme || savingTheme}
+                        onChange={(e) => setTheme({ ...theme, [opacityKey]: e.target.value })}
+                        className="flex-1 h-2 rounded-lg appearance-none cursor-pointer bg-gray-700"
+                      />
+                      <span className="text-xs text-gray-400 w-10 text-right">{(theme as any)[opacityKey]}%</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {themeMsg && (
+              <div>
+                <p className={`text-sm ${typeof themeMsg === 'string' && themeMsg?.includes('correctamente') ? 'text-green-600' : 'text-red-600'}`}>
+                  {themeMsg}
+                </p>
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={handleSaveTheme}
+                disabled={loadingTheme || savingTheme}
+                className="px-4 py-2 bg-brand-gold text-white text-sm font-medium rounded-lg hover:bg-brand-gold-dark disabled:opacity-50"
+              >
+                {savingTheme ? 'Guardando...' : 'Guardar estilos'}
+              </button>
+              <button
+                onClick={handleResetTheme}
+                disabled={loadingTheme || savingTheme}
+                className="px-4 py-2 bg-gray-700 text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-600 disabled:opacity-50"
+              >
+                Restablecer
+              </button>
+            </div>
+          </div>
+        </Tabs.Content>
+
+        <Tabs.Content value="nav">
+          <NavConfigAdmin
+            siteContent={siteContent}
+            setSiteContent={setSiteContent}
+            loading={loadingSiteContent}
+            saving={savingSiteContent}
+            message={siteContentMsg}
+            onSave={handleSaveSiteContent}
+            onReset={handleResetSiteContent}
+          />
+        </Tabs.Content>
+
+        <Tabs.Content value="sobre">
+          <SobreNosotrosConfigAdmin
+            siteContent={siteContent}
+            setSiteContent={setSiteContent}
+            loading={loadingSiteContent}
+            saving={savingSiteContent}
+            message={siteContentMsg}
+            onSave={handleSaveSiteContent}
+            onReset={handleResetSiteContent}
+          />
+        </Tabs.Content>
+
+        <Tabs.Content value="contacto">
+          <ContactoConfigAdmin
+            siteContent={siteContent}
+            setSiteContent={setSiteContent}
+            loading={loadingSiteContent}
+            saving={savingSiteContent}
+            message={siteContentMsg}
+            onSave={handleSaveSiteContent}
+            onReset={handleResetSiteContent}
+          />
+        </Tabs.Content>
+
+        <Tabs.Content value="seguridad">
+          <SecurityConfigAdmin />
+        </Tabs.Content>
+
+        <Tabs.Content value="pagos">
+          <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-700">
+              <Settings className="w-4 h-4 text-brand-gold" />
+              <h3 className="font-semibold text-white text-sm">Pagos</h3>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <p className="text-sm text-gray-300">
+                La configuración de métodos de pago ahora vive en una pantalla dedicada para mantener el panel más ordenado.
+              </p>
+              <div className="flex items-center justify-between rounded-lg border border-gray-700 px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium text-white">Estado actual</p>
+                  <p className="text-xs text-gray-400">
+                    {loadingPayments
+                      ? 'Cargando proveedores...'
+                      : paymentSettings.enabledProviders.length
+                        ? paymentSettings.enabledProviders.join(' + ')
+                        : 'Sin proveedores activos'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => router.push('/admin/pagos')}
+                  className="px-3 py-2 bg-brand-gold text-white text-sm font-medium rounded-lg hover:bg-brand-gold-dark"
+                >
+                  Ir a Pagos
+                </button>
+              </div>
+            </div>
+          </div>
+        </Tabs.Content>
+      </Tabs.Root>
+    </div>
+  )
+}

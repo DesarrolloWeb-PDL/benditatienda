@@ -1,0 +1,191 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Custom Fonts ── */
+@font-face {
+  font-family: 'Avenir Next';
+  src: url('/fonts/AvenirNext.ttc');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Avenir Next';
+  src: url('/fonts/AvenirNext.ttc');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Avenir Next Condensed';
+  src: url('/fonts/AvenirNextCondensed.ttc');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Avenir Next Condensed';
+  src: url('/fonts/AvenirNextCondensed.ttc');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Avenir';
+  src: url('/fonts/Avenir.ttc');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Holen Vintage';
+  src: url('/fonts/HolenVintage.otf');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    --background: 40 10% 18%;
+    --foreground: 40 48% 59%;
+    --safe-area-top: env(safe-area-inset-top, 0px);
+    --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-left: env(safe-area-inset-left, 0px);
+    --safe-area-right: env(safe-area-inset-right, 0px);
+
+    --card: 0 0% 17%;
+    --card-foreground: 40 48% 59%;
+
+    --popover: 0 0% 17%;
+    --popover-foreground: 40 48% 59%;
+
+    --primary: 40 48% 59%;
+    --primary-foreground: 0 0% 17%;
+
+    --secondary: 40 15% 22%;
+    --secondary-foreground: 40 48% 59%;
+
+    --muted: 40 10% 20%;
+    --muted-foreground: 40 15% 45%;
+
+    --accent: 40 48% 59%;
+    --accent-foreground: 0 0% 17%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 40 15% 28%;
+    --input: 40 15% 28%;
+    --ring: 40 48% 59%;
+
+    --radius: 0.5rem;
+
+    --brand-primary: #D4A95A;
+    --brand-primary-hover: #C49A4A;
+    --brand-secondary: #2C2C2C;
+    --brand-accent: #544A37;
+    --brand-bg-body: #3A352C;
+    --brand-bg-card: #2C2C2C;
+    --brand-text-primary: #D4A95A;
+    --brand-text-muted: #9D804B;
+    --brand-border: #544A37;
+    --brand-muted-bg: #433D32;
+    --brand-hover-bg: #4D4535;
+    --brand-sidebar-bg: #2C2C2C;
+    --brand-sidebar-text: #D4A95A;
+    --brand-success: #10b981;
+    --brand-warning: #f59e0b;
+    --brand-error: #ef4444;
+    --brand-font-heading: system-ui;
+    --brand-font-body: system-ui;
+  }
+
+  .dark {
+    --background: 210 6% 13%;
+    --foreground: 40 20% 92%;
+
+    --card: 0 0% 9%;
+    --card-foreground: 40 20% 92%;
+
+    --popover: 210 6% 13%;
+    --popover-foreground: 40 20% 92%;
+
+    --primary: 40 48% 59%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 40 20% 16%;
+    --secondary-foreground: 40 20% 92%;
+
+    --muted: 40 12% 16%;
+    --muted-foreground: 40 10% 55%;
+
+    --accent: 40 48% 59%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 40 12% 20%;
+    --input: 40 12% 20%;
+    --ring: 40 48% 59%;
+
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    background-color: var(--brand-bg-body);
+    color: var(--brand-text-primary);
+    font-family: var(--brand-font-body), system-ui, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--brand-font-heading), system-ui, sans-serif;
+    color: var(--brand-primary);
+  }
+}
+
+/* ── Mobile & Safe Area Fixes ── */
+@supports (padding: env(safe-area-inset-top)) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* Prevent iOS bounce on overscroll */
+html {
+  overscroll-behavior: none;
+}
+
+/* Fix iOS tap highlight */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Prevent text size inflation on mobile */
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Smooth scroll for anchor links */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Mobile: reduce padding on containers */
+@media (max-width: 640px) {
+  .container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}

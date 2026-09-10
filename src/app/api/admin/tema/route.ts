@@ -1,0 +1,239 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma as db } from '@/lib/db'
+import { z } from 'zod'
+import { normalizePublicAssetUrl } from '@/lib/url-normalizer'
+
+export const dynamic = 'force-dynamic'
+
+function mapDbError(error: unknown, fallback: string) {
+  const payload: Record<string, string> = { error: fallback }
+  if (!(error instanceof Error)) return payload
+
+  const configuredDbUrl = process.env.DATABASE_URL ?? ''
+  payload.details = error.message
+
+  if (error.message.includes('Environment variable not found: DATABASE_URL')) {
+    payload.error = 'Configuración incompleta: falta DATABASE_URL'
+  } else if (error.message.includes('Environment variable not found: POSTGRES_URL')) {
+    payload.error = 'Configuración incompleta: falta POSTGRES_URL'
+  } else if (error.message.includes("Can't reach database server")) {
+    payload.error = 'No se puede conectar a la base de datos'
+    try {
+      const host = configuredDbUrl ? new URL(configuredDbUrl).hostname : ''
+      if (host === 'localhost' || host === '127.0.0.1') {
+        payload.error = 'No se puede conectar a la base de datos: DATABASE_URL apunta a localhost en producción'
+      } else if (configuredDbUrl && !configuredDbUrl.includes('sslmode=')) {
+        payload.error = 'No se puede conectar a la base de datos: revisá sslmode=require en DATABASE_URL'
+      }
+    } catch {
+      // noop
+    }
+  } else if (error.message.includes('does not exist')) {
+    payload.error = 'La base de datos no está migrada o faltan tablas'
+  }
+
+  return payload
+}
+
+const hexColor = z.string().regex(/^#[0-9A-F]{6}$/i)
+
+const FONT_SIZE_PATTERN = /^clamp\([^)]+\)$|^\d+(\.\d+)?(rem|px)$/
+
+const themeSchema = z.object({
+  appTitle: z.string().min(1).max(100),
+  appSubtitle: z.string().max(200),
+  logoUrl: z.string().min(1).max(500).optional().or(z.literal('')),
+  heroImageUrl: z.string().min(1).max(500).optional().or(z.literal('')),
+  primaryColor: hexColor,
+  primaryHover: hexColor,
+  secondaryColor: hexColor,
+  accentColor: hexColor,
+  bgBody: hexColor,
+  bgCard: hexColor,
+  textPrimary: hexColor,
+  textMuted: hexColor,
+  fontHeading: z.string().min(1).max(100),
+  fontBody: z.string().min(1).max(100),
+  fontSizeTitle: z.string().regex(FONT_SIZE_PATTERN, 'Formato inválido. Usá rem, px o clamp()'),
+  logoSize: z.string().regex(/^\d+$/, 'Debe ser un número de píxeles'),
+  titleAlign: z.enum(['left', 'center', 'right']),
+  borderColor: hexColor,
+  mutedBg: hexColor,
+  hoverBg: hexColor,
+  sidebarBg: hexColor,
+  sidebarText: hexColor,
+  successColor: hexColor,
+  warningColor: hexColor,
+  errorColor: hexColor,
+  heroTitle: z.string().min(1).max(200),
+  heroSubtitle: z.string().max(500),
+  infoTitle1: z.string().min(1).max(100),
+  infoSubtitle1: z.string().max(300),
+  infoTitle2: z.string().min(1).max(100),
+  infoSubtitle2: z.string().max(300),
+  infoTitle3: z.string().min(1).max(100),
+  infoSubtitle3: z.string().max(300),
+  sectionHeaderBg: hexColor,
+  sectionHeaderOpacity: z.string().regex(/^\d+$/),
+  sectionHeroBg: hexColor,
+  sectionHeroOpacity: z.string().regex(/^\d+$/),
+  sectionProductsBg: hexColor,
+  sectionProductsOpacity: z.string().regex(/^\d+$/),
+  sectionInfoBg: hexColor,
+  sectionInfoOpacity: z.string().regex(/^\d+$/),
+  sectionFooterBg: hexColor,
+  sectionFooterOpacity: z.string().regex(/^\d+$/),
+})
+
+type ThemeConfig = z.infer<typeof themeSchema>
+
+const DEFAULT_THEME: ThemeConfig = {
+  appTitle: 'Bendito Cross',
+  appSubtitle: 'Indumentaria Deportiva y Equipamiento',
+  logoUrl: '/img/benditocross.png',
+  heroImageUrl: '/img/hero-bg.png',
+  primaryColor: '#FF0000',
+  primaryHover: '#CC0000',
+  secondaryColor: '#1A1A1A',
+  accentColor: '#333333',
+  bgBody: '#1A1A1A',
+  bgCard: '#2A2A2A',
+  textPrimary: '#FFFFFF',
+  textMuted: '#B0B0B0',
+  fontHeading: "'Impact', 'Arial Narrow Bold', sans-serif",
+  fontBody: "'Arial', sans-serif",
+  fontSizeTitle: 'clamp(1rem, 2.5vw, 1.5rem)',
+  logoSize: '36',
+  titleAlign: 'left',
+  borderColor: '#333333',
+  mutedBg: '#333333',
+  hoverBg: '#3A3A3A',
+  sidebarBg: '#1A1A1A',
+  sidebarText: '#FFFFFF',
+  successColor: '#10b981',
+  warningColor: '#f59e0b',
+  errorColor: '#ef4444',
+  heroTitle: 'Equipamiento Deportivo',
+  heroSubtitle: 'Indumentaria para CrossFit y entrenamiento funcional.',
+  infoTitle1: 'Ropa Deportiva',
+  infoSubtitle1: 'Camisetas, pantalones, shorts y accesorios para entrenar.',
+  infoTitle2: 'Equipamiento',
+  infoSubtitle2: 'Barras, bandas, guantes y equipamiento para CrossFit.',
+  infoTitle3: 'Suplementos',
+  infoSubtitle3: 'Proteínas, creatina y suplementos para optimizar tu rendimiento.',
+  sectionHeaderBg: '#000000',
+  sectionHeaderOpacity: '60',
+  sectionHeroBg: '#000000',
+  sectionHeroOpacity: '60',
+  sectionProductsBg: '#000000',
+  sectionProductsOpacity: '60',
+  sectionInfoBg: '#000000',
+  sectionInfoOpacity: '60',
+  sectionFooterBg: '#000000',
+  sectionFooterOpacity: '60',
+}
+
+const THEME_KEYS = Object.keys(DEFAULT_THEME) as (keyof ThemeConfig)[]
+
+export async function GET() {
+  try {
+    const configs = await db.siteConfig.findMany({
+      where: {
+        key: { in: THEME_KEYS.map((k) => `theme_${k}`) },
+      },
+    })
+
+    const theme: Partial<ThemeConfig> = {}
+    configs.forEach((config) => {
+      const key = config.key.replace('theme_', '') as keyof ThemeConfig
+      ;(theme as any)[key] = config.value
+    })
+
+    const mergedTheme: ThemeConfig = {
+      ...DEFAULT_THEME,
+      ...theme,
+      logoUrl: theme.logoUrl ?? DEFAULT_THEME.logoUrl,
+      heroImageUrl: theme.heroImageUrl ?? DEFAULT_THEME.heroImageUrl,
+    }
+    const normalizedLogoUrl = normalizePublicAssetUrl(mergedTheme.logoUrl)
+    const normalizedHeroImageUrl = normalizePublicAssetUrl(mergedTheme.heroImageUrl)
+
+    if (normalizedLogoUrl !== mergedTheme.logoUrl) {
+      await db.siteConfig.upsert({
+        where: { key: 'theme_logoUrl' },
+        create: { key: 'theme_logoUrl', value: normalizedLogoUrl },
+        update: { value: normalizedLogoUrl },
+      })
+      mergedTheme.logoUrl = normalizedLogoUrl
+    }
+
+    if (normalizedHeroImageUrl !== mergedTheme.heroImageUrl) {
+      await db.siteConfig.upsert({
+        where: { key: 'theme_heroImageUrl' },
+        create: { key: 'theme_heroImageUrl', value: normalizedHeroImageUrl },
+        update: { value: normalizedHeroImageUrl },
+      })
+      mergedTheme.heroImageUrl = normalizedHeroImageUrl
+    }
+
+    return NextResponse.json(mergedTheme)
+  } catch (error) {
+    console.error('Error fetching theme config:', error)
+    return NextResponse.json({ ...DEFAULT_THEME })
+  }
+}
+
+export async function PUT(req: NextRequest) {
+  try {
+    const body = await req.json()
+    const parsed = themeSchema.safeParse(body)
+
+    if (!parsed.success) {
+      console.error('[Theme PUT] Validation error:', parsed.error.flatten())
+      return NextResponse.json(
+        { error: 'Datos inválidos', details: parsed.error.flatten() },
+        { status: 400 }
+      )
+    }
+
+    const normalizedData: ThemeConfig = {
+      ...parsed.data,
+      logoUrl: normalizePublicAssetUrl(parsed.data.logoUrl ?? ''),
+      heroImageUrl: normalizePublicAssetUrl(parsed.data.heroImageUrl ?? ''),
+    }
+
+    const updates = Object.entries(normalizedData).map(([key, value]) =>
+      db.siteConfig.upsert({
+        where: { key: `theme_${key}` },
+        create: { key: `theme_${key}`, value: String(value) },
+        update: { value: String(value) },
+      })
+    )
+
+    await db.$transaction(updates)
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Error updating theme config:', error)
+    return NextResponse.json(mapDbError(error, 'Error al guardar configuración de tema'), { status: 500 })
+  }
+}
+
+export async function DELETE() {
+  try {
+    const updates = Object.entries(DEFAULT_THEME).map(([key, value]) =>
+      db.siteConfig.upsert({
+        where: { key: `theme_${key}` },
+        create: { key: `theme_${key}`, value: String(value) },
+        update: { value: String(value) },
+      })
+    )
+
+    await db.$transaction(updates)
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Error resetting theme config:', error)
+    return NextResponse.json(mapDbError(error, 'Error al restablecer tema'), { status: 500 })
+  }
+}

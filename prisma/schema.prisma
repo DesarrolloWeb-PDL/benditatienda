@@ -1,0 +1,192 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique
+  description String?
+  order       Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[]
+}
+
+model Product {
+  id           String         @id @default(cuid())
+  name         String
+  slug         String         @unique
+  description  String
+  price        Float
+  weight       Int?
+  ingredients  String
+  allergens    String
+  riskNote     String?
+  imageUrl     String
+  imageAlt     String
+  stockType    String         @default("WEEKLY")
+  weeklyStock  Int            @default(0)
+  allowSlicing Boolean        @default(true)
+  isActive     Boolean        @default(true)
+  categoryId   String
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  published    Boolean        @default(false)
+  orderItems   OrderItem[]
+  category     Category       @relation(fields: [categoryId], references: [id])
+  images       ProductImage[]
+  weeklyStocks WeeklyStock[]
+
+  @@index([categoryId])
+  @@index([slug])
+}
+
+model WeeklyStock {
+  id            String   @id @default(cuid())
+  productId     String
+  weekId        String
+  maxStock      Int
+  currentStock  Int
+  reservedStock Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, weekId])
+  @@index([weekId])
+}
+
+model User {
+  id                 String   @id @default(cuid())
+  email              String   @unique
+  name               String
+  phone              String?
+  passwordHash       String?
+  address            String?
+  city               String?
+  postalCode         String?
+  emailNotifications Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  orders             Order[]
+
+  @@index([email])
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  orderNumber     String      @unique
+  userId          String?
+  customerEmail   String
+  customerName    String
+  customerPhone   String
+  weekId          String
+  subtotal        Float
+  shippingCost    Float
+  total           Float
+  status          String      @default("PENDING")
+  deliveryMethod  String
+  pickupLocation  String?
+  pickupAddress   String?
+  pickupSchedule  String?
+  shippingAddress String?
+  shippingCity    String?
+  shippingPostal  String?
+  paymentStatus   String      @default("PENDING")
+  paymentMethod   String      @default("card")
+  stripePaymentId String?
+  mercadopagoPaymentId String?
+  customerNotes   String?
+  adminNotes      String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  paidAt          DateTime?
+  deliveredAt     DateTime?
+  deletedAt       DateTime?
+  user            User?       @relation(fields: [userId], references: [id])
+  items           OrderItem[]
+
+  @@index([userId])
+  @@index([weekId])
+  @@index([status])
+  @@index([orderNumber])
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  productId   String
+  productName String
+  quantity    Int
+  unitPrice   Float
+  subtotal    Float
+  sliced      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product  @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model PickupPoint {
+  id           String   @id @default(cuid())
+  name         String
+  address      String
+  city         String
+  postalCode   String
+  schedule     String
+  instructions String?
+  isActive     Boolean  @default(true)
+  order        Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model SiteConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  url       String
+  altText   String?
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([order])
+}
+
+model AdminSession {
+  id        String   @id @default(cuid())
+  jti       String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+
+  @@index([jti])
+  @@index([expiresAt])
+}
+
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  ip        String   @unique
+  attempts  Int      @default(1)
+  lockedUntil DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ip])
+}
