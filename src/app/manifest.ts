@@ -12,13 +12,19 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
   return {
     name: theme.appTitle || 'Bendita Tienda',
     short_name: 'Bendita Tienda',
-    description: 'Productos frescos de huerta directo al consumidor. Huevos caseros, verduras, frutas y más.',
+    description: 'Indumentaria deportiva, equipamiento y suplementos para CrossFit y entrenamiento funcional.',
     start_url: `/?v=${timestamp}`,
     display: 'standalone',
     background_color: theme.secondaryColor || '#2c2c2c',
     theme_color: theme.primaryColor || '#d89a44',
     orientation: 'portrait-primary',
     icons: [
+      {
+        src: `/favicon-shop.svg`,
+        sizes: 'any',
+        type: 'image/svg+xml',
+        purpose: 'any',
+      },
       {
         src: `/api/icon?size=192&v=${timestamp}`,
         sizes: '192x192',

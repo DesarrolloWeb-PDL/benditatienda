@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const size = parseInt(searchParams.get('size') || '192');
 
-    const svgPath = path.join(process.cwd(), 'public', 'favicon-egg.svg');
+    const svgPath = path.join(process.cwd(), 'public', 'favicon-shop.svg');
     const svgBuffer = await readFile(svgPath);
     const svgText = svgBuffer.toString('utf-8');
 
